@@ -1,4 +1,4 @@
-package com.gill.consensus.basicpaxos;
+package com.gill.consensus.paxos;
 
 import static com.gill.consensus.common.Util.EXECUTOR_LEARNER;
 
@@ -12,8 +12,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import com.gill.consensus.basicpaxos.model.Promise;
-import com.gill.consensus.basicpaxos.model.Proposal;
+import com.gill.consensus.paxos.model.Promise;
+import com.gill.consensus.paxos.model.Proposal;
 import com.gill.consensus.common.Remote;
 import com.gill.consensus.common.Util;
 
@@ -99,7 +99,7 @@ public class Acceptor {
 			this.acceptedProposalVal = proposal.proposalValue;
 			AtomicInteger success = new AtomicInteger(0);
 			CompletableFuture<?>[] cfs = learners.stream().map(learner -> CompletableFuture
-					.supplyAsync(() -> learner.save(proposal), EXECUTOR_LEARNER).thenAccept(ret -> {
+					.supplyAsync(() -> learner.learn(proposal), EXECUTOR_LEARNER).thenAccept(ret -> {
 						if (ret) {
 							success.incrementAndGet();
 						}

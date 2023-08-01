@@ -1,4 +1,4 @@
-package com.gill.consensus.basicpaxos.model;
+package com.gill.consensus.paxos.model;
 
 import lombok.Data;
 

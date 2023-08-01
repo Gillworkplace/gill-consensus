@@ -1,4 +1,4 @@
-package com.gill.consensus.basicpaxos;
+package com.gill.consensus.paxos;
 
 import static com.gill.consensus.common.Util.EXECUTOR_ACCEPTOR;
 
@@ -13,8 +13,8 @@ import java.util.function.Function;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import com.gill.consensus.basicpaxos.model.Promise;
-import com.gill.consensus.basicpaxos.model.Proposal;
+import com.gill.consensus.paxos.model.Promise;
+import com.gill.consensus.paxos.model.Proposal;
 import com.gill.consensus.common.Remote;
 import com.gill.consensus.common.Util;
 

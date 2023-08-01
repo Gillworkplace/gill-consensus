@@ -1,6 +1,5 @@
-package com.gill.consensus.basicpaxos;
+package com.gill.consensus.paxos;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -8,9 +7,7 @@ import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.ApplicationContext;
 
 import cn.hutool.core.lang.Tuple;
 import cn.hutool.core.util.RandomUtil;
@@ -22,10 +19,7 @@ import cn.hutool.core.util.RandomUtil;
  * @version 2023/07/31
  **/
 @SpringBootTest
-public class BasicPaxosTest {
-
-	@Autowired
-	private ApplicationContext context;
+public class BasicPaxosTest extends BaseTest {
 
 	@Test
 	public void testOneProposer() throws InterruptedException {
@@ -84,18 +78,6 @@ public class BasicPaxosTest {
 		Thread.sleep(1000);
 		print(learners);
 		print(acceptors);
-	}
-
-	private <T> T newTarget(Class<T> clazz) {
-		return context.getBean(clazz);
-	}
-
-	private <T> List<T> newList(int size, Class<T> clazz) {
-		List<T> arr = new ArrayList<>();
-		for (int i = 0; i < size; i++) {
-			arr.add(newTarget(clazz));
-		}
-		return arr;
 	}
 
 	private Tuple create(int pSize, int aSize, int lSize) {
@@ -161,9 +143,4 @@ public class BasicPaxosTest {
 		CompletableFuture.allOf(cfs).join();
 	}
 
-	private static <T> void print(List<T> targets) {
-		for (T target : targets) {
-			System.out.printf("%s%n", target);
-		}
-	}
 }

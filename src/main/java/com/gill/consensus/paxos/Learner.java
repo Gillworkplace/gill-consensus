@@ -1,4 +1,4 @@
-package com.gill.consensus.basicpaxos;
+package com.gill.consensus.paxos;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -7,7 +7,7 @@ import lombok.ToString;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import com.gill.consensus.basicpaxos.model.Proposal;
+import com.gill.consensus.paxos.model.Proposal;
 import com.gill.consensus.common.Remote;
 import com.gill.consensus.common.Util;
 
@@ -37,7 +37,7 @@ public class Learner {
 	 * @return boolean
 	 */
 	@Remote
-	public boolean save(Proposal proposal) {
+	public boolean learn(Proposal proposal) {
 		boolean[] success = new boolean[1];
 		dict.compute(proposal.proposerId, (key, oldProposal) -> {
 			if (oldProposal == null || oldProposal.proposalNumber < proposal.proposalNumber) {
