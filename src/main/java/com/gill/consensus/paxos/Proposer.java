@@ -37,9 +37,9 @@ import lombok.extern.slf4j.Slf4j;
 @ToString(exclude = {"acceptors"})
 public class Proposer {
 
-	private final int id = 100000 + Util.getId();
+	private final int id = 100 + Util.getId();
 
-	private final AtomicInteger proposalNum = new AtomicInteger(0);
+	private final AtomicInteger maxRound = new AtomicInteger(0);
 
 	@Setter
 	private List<Acceptor> acceptors = new ArrayList<>();
@@ -53,7 +53,7 @@ public class Proposer {
 	 */
 	@Remote
 	public int propose(int x) {
-		int proposalNum = this.proposalNum.incrementAndGet();
+		int proposalNum = proposalNum(this.maxRound.incrementAndGet());
 		AtomicReference<Pair<Integer, Integer>> acceptedProposal = new AtomicReference<>(Pair.of(0, x));
 		if (!prepare(proposalNum, acceptedProposal)) {
 			return -2;
@@ -127,5 +127,9 @@ public class Proposer {
 			return maxAcceptedProposal.get().getValue();
 		}
 		return -1;
+	}
+
+	private int proposalNum(int term) {
+		return term;
 	}
 }

@@ -1,5 +1,7 @@
 package com.gill.consensus.multipaxos;
 
+import static com.gill.consensus.common.Util.CHOSEN;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -31,6 +33,9 @@ public class Node {
 	private final ConcurrentSkipListMap<Integer, Pair<Integer, Integer>> logs = new ConcurrentSkipListMap<>(
 			Comparator.comparingInt(idx -> idx));
 
+	{
+		logs.put(0, Pair.of(CHOSEN, 0));
+	}
 
 	private volatile boolean up = true;
 
@@ -96,8 +101,8 @@ public class Node {
 
 	@Override
 	public String toString() {
-		return "Node{" + "id=" + id + ", up=" + up + ", leader=" + (leader == null ? "null" : leader.getId()) + ", others="
-				+ others.stream().map(Node::getId).collect(Collectors.toList()) + ", state=" + state + ", logs=" + logs
-				+ '}';
+		return "Node{" + "id=" + id + ", up=" + up + ", leader=" + (leader == null ? "null" : leader.getId())
+				+ ", others=" + others.stream().map(Node::getId).collect(Collectors.toList()) + ", state=" + state
+				+ ", logs=" + logs + '}';
 	}
 }

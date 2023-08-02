@@ -17,8 +17,9 @@ import com.gill.consensus.multipaxos.model.Promise;
 import com.gill.consensus.multipaxos.model.Success;
 
 import cn.hutool.core.lang.Pair;
-import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+
+import static com.gill.consensus.common.Util.CHOSEN;
 
 /**
  * Acceptor
@@ -29,7 +30,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Scope("prototype")
 @Component("multiAcceptor")
-@ToString(exclude = {"scheduler", "prepareLock", "acceptLock"})
 public class Acceptor extends AbstractState {
 
 	private ScheduledExecutorService scheduler = new ScheduledThreadPoolExecutor(2,
@@ -145,17 +145,18 @@ public class Acceptor extends AbstractState {
 			logs.put(accept.logIdx, Pair.of(accept.proposalNum, accept.proposalVal));
 
 			// 检查小于accept.firstUnchosenIndex的日志条目是否已批准
-			for (int i = firstUnchosenIndex; i < accept.firstUnchosenIndex; i++) {
+			int i;
+			for (i = firstUnchosenIndex; i <= accept.firstUnchosenIndex; i++) {
 				Pair<Integer, Integer> pair = logs.get(i);
 
 				// 如果发现acceptedProposal[i]的提案编号等于accept的提案编号则设为已批准
 				if (pair == null || notAcceptedNumEquals(accept.proposalNum, pair.getKey())) {
-					firstUnchosenIndex = i;
 					log.debug("next firstUnchosenIndex {}, pair: {}", i, pair);
 					break;
 				}
-				logs.put(i, Pair.of(Integer.MAX_VALUE, pair.getValue()));
+				logs.put(i, Pair.of(CHOSEN, pair.getValue()));
 			}
+			firstUnchosenIndex = i;
 			accepted.ok = true;
 			accepted.proposalNum = accept.proposalNum;
 			accepted.firstUnchosenIndex = firstUnchosenIndex;
@@ -166,7 +167,7 @@ public class Acceptor extends AbstractState {
 	}
 
 	private static boolean notAcceptedNumEquals(int proposalNum, int acceptedNum) {
-		return acceptedNum != Integer.MAX_VALUE && acceptedNum != proposalNum;
+		return acceptedNum != CHOSEN && acceptedNum != proposalNum;
 	}
 
 	/**
@@ -178,19 +179,24 @@ public class Acceptor extends AbstractState {
 	 */
 	public Integer success(Success success) {
 		ConcurrentSkipListMap<Integer, Pair<Integer, Integer>> logs = node.getLogs();
-		logs.put(success.logIdx, Pair.of(Integer.MAX_VALUE, success.val));
+		logs.put(success.logIdx, Pair.of(CHOSEN, success.val));
 
 		// 下一个firstUnchosenIndex的位置
 		for (int i = firstUnchosenIndex; i <= logs.lastKey(); i++) {
 			Pair<Integer, Integer> pair = logs.get(i);
 
 			// 如果发现acceptedProposal[i]的提案编号等于accept的提案编号则设为已批准
-			if (pair == null || pair.getKey() != Integer.MAX_VALUE) {
+			if (pair == null || pair.getKey() != CHOSEN) {
 				log.debug("next success firstUnchosenIndex {}, pair: {}", i, pair);
 				firstUnchosenIndex = i;
 				return i;
 			}
 		}
 		return null;
+	}
+
+	@Override
+	public String toString() {
+		return "Acceptor{" + "minProposal=" + minProposal + ", firstUnchosenIndex=" + firstUnchosenIndex + '}';
 	}
 }

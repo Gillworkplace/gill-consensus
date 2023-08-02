@@ -1,5 +1,6 @@
 package com.gill.consensus.multipaxos;
 
+import static com.gill.consensus.common.Util.CHOSEN;
 import static com.gill.consensus.common.Util.CPU_CORES;
 
 import java.util.concurrent.ExecutorService;
@@ -10,6 +11,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -22,7 +25,6 @@ import com.gill.consensus.multipaxos.model.Promise;
 import com.gill.consensus.multipaxos.model.Success;
 
 import cn.hutool.core.lang.Pair;
-import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -34,13 +36,15 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Scope("prototype")
 @Component("multiLeader")
-@ToString(exclude = {"pool", "scheduler"})
 public class Leader extends AbstractState {
 
 	private ExecutorService pool = new ThreadPoolExecutor(CPU_CORES + 1, CPU_CORES + 1, 0L, TimeUnit.MILLISECONDS,
 			new LinkedBlockingQueue<>(), r -> new Thread(r, "leader-pool"));
 
 	private ScheduledExecutorService scheduler = new ScheduledThreadPoolExecutor(2, r -> new Thread(r, "multi-leader"));
+
+	private Lock prepareLock = new ReentrantLock();
+
 	private final AtomicInteger maxRound = new AtomicInteger(0);
 
 	private final AtomicInteger nextIndex = new AtomicInteger(1);
@@ -93,7 +97,8 @@ public class Leader extends AbstractState {
 				// (1) 如果收到请求的领导者的prepared等于True，则将领导者的index赋值为nextIndex的值，
 				// 并执行nextIndex++，然后直接跳转到(6)
 				index = nextIndex.getAndIncrement();
-				proposalNum = this.maxRound.get();
+				proposalNum = proposalNum(this.maxRound.get());
+				val = x;
 			} else {
 
 				// (2) 否则，执行index = firstUnchosenIndex, nextIndex = index + 1;
@@ -101,16 +106,14 @@ public class Leader extends AbstractState {
 				nextIndex.set(index + 1);
 
 				// (3) 领导者的maxRound自增
-				proposalNum = this.maxRound.incrementAndGet();
+				proposalNum = proposalNum(this.maxRound.incrementAndGet());
 
 				// (4) 第一阶段，领导者广播Prepare(n, index)请求给所有的接受者
 				AtomicReference<Pair<Integer, Integer>> maxProposal = prepare(x, index, proposalNum);
 				if (maxProposal == null) {
 					return false;
 				}
-
 				val = maxProposal.get().getValue();
-
 				if (val != x) {
 					log.debug("repairing old data, idx: {}, proposalNum: {}, val: {}", index, proposalNum, val);
 				}
@@ -121,7 +124,7 @@ public class Leader extends AbstractState {
 			if (accept(val, index, proposalNum)) {
 
 				// (8) 一旦收到超过半数接受者的成功响应，则修改logs[accepted.firstUnchosenIndex]为最新值
-				node.getLogs().put(index, Pair.of(Integer.MAX_VALUE, val));
+				success(val, index);
 			}
 
 			// (9) 如果已批准的提案值v 等于客户端请求的inputValue，则返回true，否则跳转值(1)
@@ -141,7 +144,7 @@ public class Leader extends AbstractState {
 		// 那么使他的reply.acceptedValue作为提案值，否则使用客户端请求的inputValue作为提案值：另外，
 		// 如果超过半数的接受者回复了reply.noMoreAccepted True，那么prepared = true
 		Util.concurrencyCall(node.getOthers(), n -> {
-			AbstractState state = node.getState();
+			AbstractState state = n.getState();
 			if (!(state instanceof Acceptor)) {
 				return;
 			}
@@ -198,7 +201,7 @@ public class Leader extends AbstractState {
 		// logs[reply.firstUnchosenIndex].proposalVal)
 		// 用于修复接受者的日志
 		Util.concurrencyCall(node.getOthers(), n -> {
-			AbstractState state = node.getState();
+			AbstractState state = n.getState();
 			if (!(state instanceof Acceptor)) {
 				return;
 			}
@@ -237,5 +240,31 @@ public class Leader extends AbstractState {
 			log.debug("accept failed: proposal {}", val);
 		}
 		return success.get() > majority;
+	}
+
+	private void success(int val, int index) {
+
+		// 更新日志
+		node.getLogs().put(index, Pair.of(CHOSEN, val));
+
+		// 更新firstUnchosenIndex
+		int i;
+		for (i = firstUnchosenIndex; i <= lastLogIndex.get(); i++) {
+			Pair<Integer, Integer> logEntry = node.getLogs().get(i);
+			if (logEntry == null || logEntry.getKey() != CHOSEN) {
+				break;
+			}
+		}
+		firstUnchosenIndex = i;
+	}
+
+	private int proposalNum(int term) {
+		return term << 16 | node.getId();
+	}
+
+	@Override
+	public String toString() {
+		return "Leader{" + "maxRound=" + maxRound + ", nextIndex=" + nextIndex + ", prepared=" + prepared
+				+ ", firstUnchosenIndex=" + firstUnchosenIndex + '}';
 	}
 }

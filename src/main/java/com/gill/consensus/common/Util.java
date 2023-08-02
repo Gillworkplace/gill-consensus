@@ -16,6 +16,8 @@ import java.util.function.Consumer;
  **/
 public class Util {
 
+	public static final int CHOSEN = Integer.MAX_VALUE;
+
 	public static final int CPU_CORES = Runtime.getRuntime().availableProcessors();
 
 	private static final AtomicInteger ID = new AtomicInteger(0);

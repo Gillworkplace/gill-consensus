@@ -25,7 +25,7 @@ import lombok.Getter;
 @ToString
 public class Learner {
 
-	private final int id = 1000 + Util.getId();
+	private final int id = 300 + Util.getId();
 
 	private final Map<Integer, Proposal> dict = new ConcurrentHashMap<>();
 

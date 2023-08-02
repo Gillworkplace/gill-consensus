@@ -33,7 +33,7 @@ import lombok.ToString;
 @ToString(exclude = {"learners", "prepareLock", "acceptLock"})
 public class Acceptor {
 
-	private final int id = 10000 + Util.getId();
+	private final int id = 200 + Util.getId();
 
 	private volatile int proposalNum = 0;
 

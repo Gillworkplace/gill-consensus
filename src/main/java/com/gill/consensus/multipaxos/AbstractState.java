@@ -4,7 +4,6 @@ import java.util.function.Supplier;
 
 import lombok.Getter;
 import lombok.Setter;
-import lombok.ToString;
 
 /**
  * AbstractState
@@ -14,12 +13,11 @@ import lombok.ToString;
  **/
 @Setter
 @Getter
-@ToString(exclude = {"node"})
 public abstract class AbstractState {
 
 	protected final Node node;
 
-	protected volatile int firstUnchosenIndex;
+	protected volatile int firstUnchosenIndex = 1;
 
 	public AbstractState(Node node) {
 		this.node = node;

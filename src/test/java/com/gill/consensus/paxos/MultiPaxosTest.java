@@ -3,10 +3,12 @@ package com.gill.consensus.paxos;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.gill.consensus.common.Util;
 import com.gill.consensus.multipaxos.Node;
 
 /**
@@ -35,7 +37,7 @@ public class MultiPaxosTest extends BaseTest {
 		for (Node node : nodes) {
 			initNode(node, nodes);
 		}
-		sleep(2000L);
+		sleep(1000L);
 		print(nodes);
 		printSplit();
 	}
@@ -46,7 +48,7 @@ public class MultiPaxosTest extends BaseTest {
 		for (Node node : nodes) {
 			initNode(node, nodes);
 		}
-		sleep(2000L);
+		sleep(500L);
 		print(nodes);
 		printSplit();
 
@@ -56,7 +58,7 @@ public class MultiPaxosTest extends BaseTest {
 			node.getOthers().add(newLeader);
 		}
 		initNode(newLeader, nodes);
-		sleep(2000L);
+		sleep(500L);
 		print(nodes);
 	}
 
@@ -66,12 +68,12 @@ public class MultiPaxosTest extends BaseTest {
 		for (Node node : nodes) {
 			initNode(node, nodes);
 		}
-		sleep(2000L);
+		sleep(500L);
 		print(nodes);
 		printSplit();
 
 		nodes.stream().max(Comparator.comparingInt(Node::getId)).ifPresent(Node::stop);
-		sleep(2000L);
+		sleep(500L);
 		print(nodes);
 	}
 
@@ -81,19 +83,62 @@ public class MultiPaxosTest extends BaseTest {
 		for (Node node : nodes) {
 			initNode(node, nodes);
 		}
-		sleep(2000L);
+		sleep(500L);
 		print(nodes);
 		printSplit();
 
 		nodes.stream().max(Comparator.comparingInt(Node::getId)).ifPresent(node -> {
 			node.stop();
-			sleep(2000L);
+			sleep(500L);
 			print(nodes);
 			printSplit();
 
 			node.init();
-			sleep(2000L);
+			sleep(500L);
 			print(nodes);
 		});
+	}
+
+	@Test
+	public void testLeaderPropose() {
+		List<Node> nodes = createNodes(4);
+		for (Node node : nodes) {
+			initNode(node, nodes);
+		}
+		sleep(500L);
+
+		nodes.stream().max(Comparator.comparingInt(Node::getId)).ifPresent(node -> {
+			node.propose(10);
+		});
+		print(nodes);
+	}
+
+	@Test
+	public void testLeaderProposesSequence() {
+		List<Node> nodes = createNodes(4);
+		for (Node node : nodes) {
+			initNode(node, nodes);
+		}
+		sleep(500L);
+
+		nodes.stream().max(Comparator.comparingInt(Node::getId)).ifPresent(node -> {
+			for (int i = 100; i < 105; i++) {
+				node.propose(i);
+			}
+		});
+		print(nodes);
+	}
+
+	@Test
+	public void testLeaderProposesConcurrency() {
+		List<Node> nodes = createNodes(4);
+		for (Node node : nodes) {
+			initNode(node, nodes);
+		}
+		sleep(500L);
+
+		nodes.stream().max(Comparator.comparingInt(Node::getId)).ifPresent(node -> Util
+				.concurrencyCall(IntStream.range(100, 105).boxed().collect(Collectors.toList()), node::propose));
+		print(nodes);
 	}
 }

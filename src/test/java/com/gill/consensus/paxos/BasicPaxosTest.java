@@ -27,7 +27,7 @@ public class BasicPaxosTest extends BaseTest {
 		List<Proposer> proposers = tuple.get(0);
 		List<Learner> learners = tuple.get(2);
 		propose(proposers, true);
-		Thread.sleep(1000);
+		Thread.sleep(500);
 		print(learners);
 	}
 
@@ -37,7 +37,7 @@ public class BasicPaxosTest extends BaseTest {
 		List<Proposer> proposers = tuple.get(0);
 		List<Learner> learners = tuple.get(2);
 		propose(proposers, true);
-		Thread.sleep(1000);
+		Thread.sleep(500);
 		print(learners);
 	}
 
@@ -47,7 +47,7 @@ public class BasicPaxosTest extends BaseTest {
 		List<Proposer> proposers = tuple.get(0);
 		List<Learner> learners = tuple.get(2);
 		propose(proposers, false);
-		Thread.sleep(1000);
+		Thread.sleep(500);
 		print(learners);
 	}
 
@@ -62,7 +62,7 @@ public class BasicPaxosTest extends BaseTest {
 				.mapToObj(i -> CompletableFuture.runAsync(() -> propose(proposers, true, x)))
 				.toArray(CompletableFuture[]::new);
 		CompletableFuture.allOf(cfs).join();
-		Thread.sleep(1000);
+		Thread.sleep(500);
 		print(learners);
 		print(acceptors);
 	}
