@@ -7,15 +7,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Remote
+ * Cost
  *
  * @author gill
- * @version 2023/07/31
+ * @version 2023/08/05
  **/
 @Target({ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface Remote {
+public @interface Cost {
 
-    int delay() default 25;
+    int threshold() default 5;
 }

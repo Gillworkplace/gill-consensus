@@ -11,8 +11,8 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 @SpringBootApplication
 public class GillConsensusApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(GillConsensusApplication.class, args);
-    }
+	public static void main(String[] args) {
+		SpringApplication.run(GillConsensusApplication.class, args);
+	}
 
 }

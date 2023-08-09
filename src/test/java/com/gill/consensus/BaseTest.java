@@ -1,4 +1,4 @@
-package com.gill.consensus.paxos;
+package com.gill.consensus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,9 +30,12 @@ public abstract class BaseTest {
 	}
 
 	protected static <T> void print(List<T> targets) {
+		System.out.println();
 		for (T target : targets) {
 			System.out.printf("%s%n", target);
+			printSplit();
 		}
+		System.out.println();
 	}
 
 	protected static void printSplit() {

@@ -8,6 +8,7 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.gill.consensus.BaseTest;
 import com.gill.consensus.common.Util;
 import com.gill.consensus.multipaxos.Node;
 
@@ -107,9 +108,7 @@ public class MultiPaxosTest extends BaseTest {
 		}
 		sleep(500L);
 
-		nodes.stream().max(Comparator.comparingInt(Node::getId)).ifPresent(node -> {
-			node.propose(10);
-		});
+		nodes.stream().max(Comparator.comparingInt(Node::getId)).ifPresent(node -> node.propose(10));
 		print(nodes);
 	}
 
