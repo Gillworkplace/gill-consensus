@@ -21,10 +21,22 @@ public abstract class BaseTest {
 		return context.getBean(clazz);
 	}
 
+	protected <T> T newTarget(String beanName, Class<T> clazz) {
+		return context.getBean(beanName, clazz);
+	}
+
 	protected <T> List<T> newList(int size, Class<T> clazz) {
 		List<T> arr = new ArrayList<>();
 		for (int i = 0; i < size; i++) {
 			arr.add(newTarget(clazz));
+		}
+		return arr;
+	}
+
+	protected <T> List<T> newList(int size, String beanName, Class<T> clazz) {
+		List<T> arr = new ArrayList<>();
+		for (int i = 0; i < size; i++) {
+			arr.add(newTarget(beanName, clazz));
 		}
 		return arr;
 	}

@@ -23,37 +23,37 @@ import cn.hutool.core.util.RandomUtil;
 public class BasicPaxosTest extends BaseTest {
 
 	@Test
-	public void testOneProposer() throws InterruptedException {
+	public void testOneProposer() {
 		Tuple tuple = create(1, 1, 1);
 		List<Proposer> proposers = tuple.get(0);
 		List<Learner> learners = tuple.get(2);
 		propose(proposers, true);
-		Thread.sleep(500);
+		sleep(500);
 		print(learners);
 	}
 
 	@Test
-	public void testMoreProposer() throws InterruptedException {
+	public void testMoreProposer() {
 		Tuple tuple = create(3, 3, 2);
 		List<Proposer> proposers = tuple.get(0);
 		List<Learner> learners = tuple.get(2);
 		propose(proposers, true);
-		Thread.sleep(500);
+		sleep(500);
 		print(learners);
 	}
 
 	@Test
-	public void testSuccessProposals() throws InterruptedException {
+	public void testSuccessProposals() {
 		Tuple tuple = create(3, 3, 2);
 		List<Proposer> proposers = tuple.get(0);
 		List<Learner> learners = tuple.get(2);
 		propose(proposers, false);
-		Thread.sleep(500);
+		sleep(500);
 		print(learners);
 	}
 
 	@Test
-	public void testConcurrencySameProposer() throws InterruptedException {
+	public void testConcurrencySameProposer() {
 		Tuple tuple = create(1, 3, 2);
 		List<Proposer> proposers = tuple.get(0);
 		List<Acceptor> acceptors = tuple.get(1);
@@ -63,20 +63,20 @@ public class BasicPaxosTest extends BaseTest {
 				.mapToObj(i -> CompletableFuture.runAsync(() -> propose(proposers, true, x)))
 				.toArray(CompletableFuture[]::new);
 		CompletableFuture.allOf(cfs).join();
-		Thread.sleep(500);
+		sleep(500);
 		print(learners);
 		print(acceptors);
 	}
 
 	@Test
-	public void testSequenceSameProposer() throws InterruptedException {
+	public void testSequenceSameProposer() {
 		Tuple tuple = create(1, 3, 1);
 		List<Proposer> proposers = tuple.get(0);
 		List<Acceptor> acceptors = tuple.get(1);
 		List<Learner> learners = tuple.get(2);
 		AtomicInteger x = new AtomicInteger(16);
 		IntStream.range(0, 5).forEach(i -> propose(proposers, true, x));
-		Thread.sleep(1000);
+		sleep(1000);
 		print(learners);
 		print(acceptors);
 	}

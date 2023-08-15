@@ -1,17 +1,19 @@
 package com.gill.consensus.raft;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import com.gill.consensus.BaseTest;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.gill.consensus.BaseTest;
 import com.gill.consensus.common.Util;
+import com.gill.consensus.raft.mock.NodeRemote;
 import com.gill.consensus.raft.model.LogEntry;
 
 import cn.hutool.core.lang.Assert;
@@ -39,6 +41,9 @@ public class RaftTest extends BaseTest {
 		return nodes;
 	}
 
+	/**
+	 * 测试初始节点是否能选出Leader
+	 */
 	@Test
 	public void testElection() {
 		init(5);
@@ -54,6 +59,9 @@ public class RaftTest extends BaseTest {
 		init(10);
 	}
 
+	/**
+	 * 测试propose
+	 */
 	@Test
 	public void testPropose() {
 		List<Node> nodes = init(5);
@@ -70,6 +78,9 @@ public class RaftTest extends BaseTest {
 		testPropose();
 	}
 
+	/**
+	 * 测试并发propose
+	 */
 	@Test
 	public void testProposeConcurrently() {
 		List<Node> nodes = init(5);
@@ -86,6 +97,35 @@ public class RaftTest extends BaseTest {
 		testProposes();
 	}
 
+	/**
+	 * 测试并发propose
+	 */
+	@Test
+	public void testProposeRemoteConcurrently() {
+		List<Node> nodes = new ArrayList<>();
+		for (int i = 0; i < 5; i++) {
+			nodes.add(newTarget(NodeRemote.class));
+		}
+		for (Node node : nodes) {
+			node.setNodes(nodes);
+		}
+		nodes.forEach(Node::start);
+		log.info("start");
+		sleep(1000L);
+		log.info("print");
+		print(nodes);
+		checkOnlyOneLeader(nodes);
+		Util.concurrencyCall(IntStream.range(0, 10).boxed().collect(Collectors.toList()),
+				idx -> Assert.isTrue(nodes.get(RandomUtil.randomInt(0, 5)).propose(RandomUtil.randomInt(), idx)));
+		print(nodes);
+		Node leader = leader(nodes);
+		Assert.equals(12, leader.getLogs().size());
+		checkLogsConsistency(nodes);
+	}
+
+	/**
+	 * 测试leader日志比follower新的日志同步
+	 */
 	@Test
 	public void testLeaderOverFollower() {
 		List<Node> leaders = newList(1, Node.class);
@@ -147,7 +187,7 @@ public class RaftTest extends BaseTest {
 	}
 
 	private List<Node> createNodes(int size) {
-		List<Node> nodes = newList(size, Node.class);
+		List<Node> nodes = newList(size, "raftNode", Node.class);
 		for (Node node : nodes) {
 			node.setNodes(nodes);
 		}
