@@ -108,6 +108,7 @@ public class Leader extends AbstractState {
 		List<NodeProxy> followers = Util.getFollowers(node.getNodesProxy(), proxy -> node.getId() != proxy.getNode().getId());
 		boolean ret = Util.majorityCall(followers, proxy -> proxy.appendEntry(logEntry), reply -> reply.success,
 				pool, "appendEntry");
+		// TODO 此处有BUG
 		if (ret) {
 			node.getCommittedIndex().accumulateAndGet(logIdx, Math::max);
 		}

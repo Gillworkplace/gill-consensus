@@ -128,7 +128,7 @@ public class RaftTest extends BaseTest {
 	 */
 	@Test
 	public void testLeaderOverFollower() {
-		List<Node> leaders = newList(1, Node.class);
+		List<Node> leaders = newList(1, "raftNode", Node.class);
 		Node leader = leaders.get(0);
 		leader.start();
 		sleep(1000);
@@ -149,7 +149,7 @@ public class RaftTest extends BaseTest {
 
 	@Test
 	public void testLeaderMoreOverFollower() {
-		List<Node> leaders = newList(1, Node.class);
+		List<Node> leaders = newList(1, "raftNode", Node.class);
 		Node leader = leaders.get(0);
 		leader.start();
 		sleep(1000);
