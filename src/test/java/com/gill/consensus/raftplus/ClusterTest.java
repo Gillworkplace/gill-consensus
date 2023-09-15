@@ -15,6 +15,8 @@ import com.gill.consensus.BaseTest;
 import com.gill.consensus.raftplus.mock.MockNode;
 import com.gill.consensus.raftplus.model.LogEntry;
 
+import cn.hutool.core.util.RandomUtil;
+
 /**
  * ClusterTest
  *
@@ -31,32 +33,46 @@ public class ClusterTest extends BaseTest {
 		}
 		sleep(500);
 		int leaderCnt = 0;
+		int followerCnt = 0;
 		for (MockNode node : nodes) {
 			if (node.isLeader()) {
 				leaderCnt++;
 			}
+			if (node.isFollower()) {
+				followerCnt++;
+			}
 		}
-		Assertions.assertEquals(1, leaderCnt, "leader 数目异常");
+		try {
+			Assertions.assertEquals(1, leaderCnt, "leader 数目异常");
+			Assertions.assertEquals(num - 1, followerCnt, "follower 数目异常");
+		} catch (Throwable e) {
+			System.out.println("============ AFTER EXCEPTION ===============");
+			stopNodes(nodes);
+			throw e;
+		}
 		return nodes;
 	}
 
 	@RepeatedTest(10)
 	public void testNodeInit() {
-		nodesInit(1);
+		List<MockNode> nodes = nodesInit(1);
+		System.out.println("============ TEST FINISHED =============");
+		stopNodes(nodes);
 	}
 
 	/**
 	 * 节点初始化在500ms内能选出主节点
 	 */
-	@RepeatedTest(10)
+	@RepeatedTest(30)
 	public void testNodesInit() {
-		nodesInit(5);
+		List<MockNode> nodes = nodesInit(5);
+		System.out.println("============ TEST FINISHED =============");
+		stopNodes(nodes);
 	}
 
 	/**
 	 * 移除leader后能否重新选出节点
 	 */
-
 	@RepeatedTest(10)
 	public void testRemoveLeader() {
 		final int num = 5;
@@ -75,7 +91,13 @@ public class ClusterTest extends BaseTest {
 				leaderCnt++;
 			}
 		}
-		Assertions.assertEquals(1, leaderCnt, "leader 数目异常");
+		try {
+			Assertions.assertEquals(1, leaderCnt, "leader 数目异常");
+			stopNodes(nodes);
+		} catch (Throwable e) {
+			stopNodes(nodes);
+			throw e;
+		}
 	}
 
 	/**
@@ -125,9 +147,23 @@ public class ClusterTest extends BaseTest {
 
 	private List<MockNode> init(int num) {
 		List<MockNode> nodes = new ArrayList<>();
+		int offset = RandomUtil.randomInt(1000) * 100;
 		for (int i = 0; i < num; i++) {
-			nodes.add(new MockNode(i));
+			nodes.add(new MockNode(offset + i));
 		}
+		System.out.println("offset: " + offset);
 		return nodes;
+	}
+
+	private static void printNodes(List<MockNode> nodes) {
+		for (MockNode node : nodes) {
+			System.out.println(node.println());
+		}
+	}
+
+	private static void stopNodes(List<MockNode> nodes) {
+		for (MockNode node : nodes) {
+			node.stop();
+		}
 	}
 }

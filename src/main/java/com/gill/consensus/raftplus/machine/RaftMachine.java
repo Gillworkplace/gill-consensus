@@ -5,15 +5,17 @@ import java.util.List;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.gill.consensus.raftplus.Node;
+import com.gill.consensus.raftplus.service.PrintService;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableList;
 
-import javafx.util.Pair;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -23,14 +25,17 @@ import lombok.extern.slf4j.Slf4j;
  * @version 2023/08/18
  **/
 @Slf4j
-public class RaftMachine {
+public class RaftMachine implements PrintService {
 
 	private final HashBasedTable<RaftState, RaftEvent, Target> table = HashBasedTable.create();
 
-	private final BlockingDeque<Pair<RaftEvent, RaftEventParams>> eventQueue = new LinkedBlockingDeque<>();
+	private final BlockingDeque<RaftEntry> eventQueue = new LinkedBlockingDeque<>();
 
-	private final ExecutorService executor = new ScheduledThreadPoolExecutor(1, r -> new Thread(r, "raft-machine"),
-			(r, executor) -> log.warn("raft machine receive another scheduler"));
+	private final Node node;
+
+	private final ExecutorService executor;
+
+	private volatile boolean running = true;
 
 	{
 		table.put(RaftState.STRANGER, RaftEvent.INIT, Target.of(ImmutableList.of(RaftAction.INIT), RaftState.FOLLOWER,
@@ -39,18 +44,12 @@ public class RaftMachine {
 		table.put(RaftState.FOLLOWER, RaftEvent.PING_TIMEOUT,
 				Target.of(ImmutableList.of(RaftAction.REMOVE_FOLLOWER_SCHEDULER), RaftState.PRE_CANDIDATE,
 						ImmutableList.of(RaftAction.TO_PRE_CANDIDATE)));
-		table.put(RaftState.FOLLOWER, RaftEvent.ACCEPT_LEADER, Target.of(ImmutableList.of(RaftAction.ACCEPT_LEADER),
-				RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
+		table.put(RaftState.FOLLOWER, RaftEvent.FORCE_FOLLOWER, Target.of(RaftState.FOLLOWER));
 		table.put(RaftState.FOLLOWER, RaftEvent.STOP,
 				Target.of(ImmutableList.of(RaftAction.REMOVE_FOLLOWER_SCHEDULER, RaftAction.STOP), RaftState.STRANGER));
 
-		table.put(RaftState.PRE_CANDIDATE, RaftEvent.PREVOTE_SUCCESS,
+		table.put(RaftState.PRE_CANDIDATE, RaftEvent.TO_CANDIDATE,
 				Target.of(RaftState.CANDIDATE, ImmutableList.of(RaftAction.POST_CANDIDATE)));
-		table.put(RaftState.PRE_CANDIDATE, RaftEvent.PREVOTE_FAILED,
-				Target.of(RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
-		table.put(RaftState.PRE_CANDIDATE, RaftEvent.ACCEPT_LEADER,
-				Target.of(ImmutableList.of(RaftAction.ACCEPT_LEADER), RaftState.FOLLOWER,
-						ImmutableList.of(RaftAction.POST_FOLLOWER)));
 		table.put(RaftState.PRE_CANDIDATE, RaftEvent.FORCE_FOLLOWER,
 				Target.of(RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
 		table.put(RaftState.PRE_CANDIDATE, RaftEvent.STOP,
@@ -58,33 +57,25 @@ public class RaftMachine {
 
 		table.put(RaftState.CANDIDATE, RaftEvent.TO_LEADER,
 				Target.of(RaftState.LEADER, ImmutableList.of(RaftAction.POST_LEADER)));
-		table.put(RaftState.CANDIDATE, RaftEvent.VOTE_FAILED,
-				Target.of(RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
-		table.put(RaftState.CANDIDATE, RaftEvent.ACCEPT_LEADER, Target.of(ImmutableList.of(RaftAction.ACCEPT_LEADER),
-				RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
 		table.put(RaftState.CANDIDATE, RaftEvent.FORCE_FOLLOWER,
 				Target.of(RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
 		table.put(RaftState.CANDIDATE, RaftEvent.STOP,
 				Target.of(ImmutableList.of(RaftAction.STOP), RaftState.STRANGER));
 
-		table.put(RaftState.LEADER, RaftEvent.ACCEPT_LEADER,
-				Target.of(ImmutableList.of(RaftAction.REMOVE_LEADER_SCHEDULER, RaftAction.ACCEPT_LEADER),
-						RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
-		table.put(RaftState.LEADER, RaftEvent.NETWORK_PARTITION,
+		table.put(RaftState.LEADER, RaftEvent.FORCE_FOLLOWER,
 				Target.of(ImmutableList.of(RaftAction.REMOVE_LEADER_SCHEDULER), RaftState.FOLLOWER,
 						ImmutableList.of(RaftAction.POST_FOLLOWER)));
-		table.put(RaftState.LEADER, RaftEvent.FORCE_FOLLOWER,
-				Target.of(RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
 		table.put(RaftState.LEADER, RaftEvent.STOP,
 				Target.of(ImmutableList.of(RaftAction.REMOVE_LEADER_SCHEDULER, RaftAction.STOP), RaftState.STRANGER));
 	}
-
-	private final Node node;
 
 	private RaftState state;
 
 	public RaftMachine(Node node) {
 		this.node = node;
+		this.executor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+				new LinkedBlockingQueue<>(Collections.emptyList()), r -> new Thread(r, "machine-" + node.getID()),
+				(r, executor) -> log.warn("raft machine receive another scheduler"));
 		this.state = RaftState.STRANGER;
 	}
 
@@ -93,50 +84,35 @@ public class RaftMachine {
 	}
 
 	/**
-	 * 发布事件
-	 * 
-	 * @param event
-	 *            事件
-	 * @param params
-	 *            参数
-	 */
-	public void publishEvent(RaftEvent event, RaftEventParams params) {
-		Pair<RaftEvent, RaftEventParams> pair = new Pair<>(event, params);
-
-		// 该事件优先级最高并可中断其他事件
-		if (event == RaftEvent.ACCEPT_LEADER) {
-			eventQueue.offerFirst(pair);
-		} else {
-			eventQueue.offerLast(pair);
-		}
-	}
-
-	/**
 	 * 启动
 	 *
 	 * @return this
 	 */
-	@SuppressWarnings({"InfiniteLoopStatement", "ConstantConditions"})
 	public RaftMachine start() {
+		log.info("machine is starting");
 
 		// 该方法为单线程执行，没有线程安全问题
 		executor.execute(() -> {
-			while (true) {
+			while (running) {
 				try {
-					Pair<RaftEvent, RaftEventParams> eventPair = eventQueue.poll(1000, TimeUnit.MILLISECONDS);
-					RaftEvent event = eventPair.getKey();
-					RaftEventParams params = eventPair.getValue();
-					Target target = table.get(state, eventPair.getKey());
+					RaftEntry entry = eventQueue.poll(1000, TimeUnit.MILLISECONDS);
+					if (entry == null) {
+						continue;
+					}
+					RaftEvent event = entry.getEvent();
+					RaftEventParams params = entry.getParams();
+					Target target = table.get(state, event);
 
 					// 状态和事件对不上说明优先级高的Accept Leader事件被处理了，旧的事件可以抛弃不处理了。
 					if (target == null) {
-						log.info("ignore event. current term {}, event: {}, event term: {}", node.getTerm(), event,
-								params.getTerm());
+						log.info("ignore event {}. current state {}", event, state);
+						tagCompleted(entry, params);
 						continue;
 					}
 					if (node.getTerm() > params.getTerm()) {
-						log.info("discard event. current term {}, event: {}, event term: {}", node.getTerm(), event,
+						log.info("discard event {}. current term {}, event term: {}", event, node.getTerm(),
 								params.getTerm());
+						tagCompleted(entry, params);
 						continue;
 					}
 
@@ -145,16 +121,26 @@ public class RaftMachine {
 
 					// 转换状态
 					this.state = target.getTargetState();
-					log.debug("node: {} change to {}", node.getID(), state.name());
 
 					// 执行post动作
 					postActions(event, params, target);
+					tagCompleted(entry, params);
+					log.debug("to be {}", state.name());
 				} catch (InterruptedException e) {
-					log.error(e.toString());
+					log.warn(e.toString());
 				}
 			}
+			log.info("machine exits");
 		});
 		return this;
+	}
+
+	/**
+	 * 停止machine
+	 */
+	public void stop() {
+		log.info("machine is stopping");
+		running = false;
 	}
 
 	private void preActions(RaftEvent event, RaftEventParams params, Target target) {
@@ -164,8 +150,7 @@ public class RaftMachine {
 				log.trace("state: {} receives event: {} to do pre-action: {}", state, event.name(), action.name());
 				action.action(node, params);
 			} catch (Exception e) {
-				log.error("node: {} state {} action event {} failed, e: {}", node.getID(), state.name(), event.name(),
-						e);
+				log.error("state {} action event {} failed, e: {}", state.name(), event.name(), e);
 			}
 		}
 	}
@@ -177,8 +162,40 @@ public class RaftMachine {
 				log.trace("state: {} receives event: {} to do post-action: {}", state, event.name(), action.name());
 				action.action(node, params);
 			} catch (Exception e) {
-				log.error("node: {} state {} action event {} failed, e: {}", node.getID(), state.name(), event.name(),
-						e);
+				log.error("state {} action event {} failed, e: {}", state.name(), event.name(), e);
+			}
+		}
+	}
+
+	private void tagCompleted(RaftEntry entry, RaftEventParams params) {
+		entry.setCompleted(true);
+		if (params.isSync()) {
+			params.getLatch().countDown();
+		}
+	}
+
+	/**
+	 * 发布事件
+	 *
+	 * @param event
+	 *            事件
+	 * @param params
+	 *            参数
+	 */
+	public void publishEvent(RaftEvent event, RaftEventParams params) {
+		RaftEntry entry = new RaftEntry(event, params);
+
+		// 该事件优先级最高并可中断其他事件
+		if (event == RaftEvent.FORCE_FOLLOWER) {
+			eventQueue.offerFirst(entry);
+		} else {
+			eventQueue.offerLast(entry);
+		}
+		if (params.isSync()) {
+			try {
+				params.getLatch().await();
+			} catch (InterruptedException e) {
+				log.warn("sync event is interrupted, e: {}", e.getMessage());
 			}
 		}
 	}
@@ -190,6 +207,15 @@ public class RaftMachine {
 	 */
 	public boolean isReady() {
 		return this.state != RaftState.STRANGER;
+	}
+
+	@Override
+	public String println() {
+		StringBuilder sb = new StringBuilder();
+		sb.append("Running: ").append(running).append("\t");
+		sb.append("state: ").append(state).append(System.lineSeparator());
+		sb.append("event queue: ").append(eventQueue).append(System.lineSeparator());
+		return sb.toString();
 	}
 
 	@Getter
@@ -221,6 +247,26 @@ public class RaftMachine {
 
 		public static Target of(RaftState targetState) {
 			return new Target(Collections.emptyList(), targetState, Collections.emptyList());
+		}
+	}
+
+	@Getter
+	@ToString
+	private static class RaftEntry {
+
+		private final RaftEvent event;
+
+		private final RaftEventParams params;
+
+		private volatile boolean completed = false;
+
+		public RaftEntry(RaftEvent event, RaftEventParams params) {
+			this.event = event;
+			this.params = params;
+		}
+
+		public void setCompleted(boolean completed) {
+			this.completed = completed;
 		}
 	}
 }

@@ -3,15 +3,16 @@ package com.gill.consensus.raftplus.state;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-import com.gill.consensus.common.Util;
+import cn.hutool.core.util.RandomUtil;
 import com.gill.consensus.raftplus.LogManager;
 import com.gill.consensus.raftplus.Node;
+import com.gill.consensus.raftplus.common.Utils;
 import com.gill.consensus.raftplus.entity.PreVoteParam;
 import com.gill.consensus.raftplus.entity.Reply;
 import com.gill.consensus.raftplus.machine.RaftEvent;
 import com.gill.consensus.raftplus.machine.RaftEventParams;
-
 import com.gill.consensus.raftplus.service.InnerNodeService;
+
 import javafx.util.Pair;
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,14 +34,20 @@ public class PreCandidate {
 	 *            params
 	 */
 	public static void preVote(Node self, RaftEventParams params) {
+		long pTerm = params.getTerm();
+		log.info("start to pre-vote when term: {}", pTerm);
 		ExecutorService clusterPool = self.getThreadPools().getClusterPool();
 		List<InnerNodeService> followers = self.getFollowers();
-		boolean success = Util.majorityCall(followers, follower -> doPreVote(self, follower, params), Reply::isSuccess, clusterPool,
-				"pre-vote");
+		boolean success = Utils.majorityCall(followers, follower -> doPreVote(self, follower, params), Reply::isSuccess,
+				clusterPool, "pre-vote");
 		if (success) {
-			self.publishEvent(RaftEvent.PREVOTE_SUCCESS, params);
+			self.publishEvent(RaftEvent.TO_CANDIDATE, new RaftEventParams(pTerm));
 		} else {
-			self.publishEvent(RaftEvent.PREVOTE_FAILED, RaftEventParams.builder().term(self.getTerm()).build());
+			log.debug("pre-vote failed when term: {}", pTerm);
+
+			// 增加随机时间
+			Utils.sleepQuietly(RandomUtil.randomInt(50));
+			self.stepDown();
 		}
 	}
 

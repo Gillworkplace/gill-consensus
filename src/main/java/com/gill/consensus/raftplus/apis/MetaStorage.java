@@ -1,6 +1,6 @@
 package com.gill.consensus.raftplus.apis;
 
-import com.gill.consensus.raftplus.PersistentProperties;
+import com.gill.consensus.raftplus.model.PersistentProperties;
 
 /**
  * MetaStorage

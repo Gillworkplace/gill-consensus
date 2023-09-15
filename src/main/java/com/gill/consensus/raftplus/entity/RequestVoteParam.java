@@ -1,6 +1,5 @@
 package com.gill.consensus.raftplus.entity;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -11,8 +10,8 @@ import lombok.ToString;
  * @version 2023/08/18
  **/
 @Getter
-@ToString
-public class RequestVoteParam extends BaseParam{
+@ToString(callSuper = true)
+public class RequestVoteParam extends BaseParam {
 
 	private final long lastLogTerm;
 

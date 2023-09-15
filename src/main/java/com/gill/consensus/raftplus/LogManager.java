@@ -162,6 +162,6 @@ public class LogManager implements PrintService {
 
 	@Override
 	public String println() {
-		return null;
+		return logs.toString();
 	}
 }

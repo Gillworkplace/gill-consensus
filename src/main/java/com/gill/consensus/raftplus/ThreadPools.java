@@ -4,8 +4,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.gill.consensus.raftplus.common.Utils;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * NodePool
@@ -14,6 +16,7 @@ import lombok.Getter;
  * @version 2023/09/06
  **/
 @Getter
+@Slf4j
 public class ThreadPools {
 
 	@Getter(AccessLevel.NONE)
@@ -33,14 +36,16 @@ public class ThreadPools {
 	 *            线程池
 	 */
 	public void setClusterPool(ExecutorService clusterPool) {
+		ExecutorService tmp = this.clusterPool;
 		clusterPoolLock.lock();
 		try {
-			if (this.clusterPool != null) {
-				this.clusterPool.shutdown();
-			}
 			this.clusterPool = clusterPool;
 		} finally {
 			clusterPoolLock.unlock();
+		}
+		if (tmp != null) {
+			tmp.shutdown();
+			Utils.awaitTermination(tmp, "clusterPool");
 		}
 	}
 
@@ -51,15 +56,16 @@ public class ThreadPools {
 	 *            线程池
 	 */
 	public void setApiPool(ExecutorService apiPool) {
+		ExecutorService tmp = this.apiPool;
 		apiPoolLock.lock();
 		try {
-			if (this.apiPool != null) {
-				this.apiPool.shutdown();
-			}
 			this.apiPool = apiPool;
 		} finally {
 			apiPoolLock.unlock();
 		}
-
+		if (tmp != null) {
+			tmp.shutdown();
+			Utils.awaitTermination(tmp, "apiPool");
+		}
 	}
 }

@@ -2,6 +2,7 @@ package com.gill.consensus.raftplus;
 
 import javafx.util.Pair;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * HeartbeatState
@@ -9,6 +10,7 @@ import lombok.ToString;
  * @author gill
  * @version 2023/09/06
  **/
+@Slf4j
 @ToString
 public class HeartbeatState {
 
@@ -24,17 +26,18 @@ public class HeartbeatState {
 	/**
 	 * set
 	 * 
-	 * @param lastHeartbeatTerm
+	 * @param term
 	 *            上次心跳收到的任期
-	 * @param lastHeartbeatTimestamp
+	 * @param heartbeatTimestamp
 	 *            上次收到心跳的时间
 	 */
-	public synchronized void set(long lastHeartbeatTerm, long lastHeartbeatTimestamp) {
-		if (lastHeartbeatTerm < this.lastHeartbeatTerm) {
+	public synchronized void set(long term, long heartbeatTimestamp) {
+		if (term < this.lastHeartbeatTerm) {
+			log.debug("discard heartbeat");
 			return;
 		}
-		this.lastHeartbeatTerm = lastHeartbeatTerm;
-		this.lastHeartbeatTimestamp = lastHeartbeatTimestamp;
+		this.lastHeartbeatTerm = term;
+		this.lastHeartbeatTimestamp = Math.max(heartbeatTimestamp, this.lastHeartbeatTimestamp);
 	}
 
 	/**

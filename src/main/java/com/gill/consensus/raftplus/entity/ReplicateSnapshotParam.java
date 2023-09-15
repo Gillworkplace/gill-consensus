@@ -1,6 +1,5 @@
 package com.gill.consensus.raftplus.entity;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 

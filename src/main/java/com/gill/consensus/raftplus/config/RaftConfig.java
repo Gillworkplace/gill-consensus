@@ -2,6 +2,7 @@ package com.gill.consensus.raftplus.config;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 
 /**
  * RaftConfig
@@ -11,6 +12,7 @@ import lombok.Setter;
  **/
 @Getter
 @Setter
+@ToString
 public class RaftConfig {
 
 	private long heartbeatInterval = 100L;
@@ -25,6 +27,7 @@ public class RaftConfig {
 
 	@Getter
 	@Setter
+	@ToString
 	public static class LogConfig {
 
 		private int loadLen = 30;

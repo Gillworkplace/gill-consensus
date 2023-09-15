@@ -1,19 +1,16 @@
 package com.gill.consensus.raftplus.state;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-import com.gill.consensus.common.Util;
 import com.gill.consensus.raftplus.LogManager;
 import com.gill.consensus.raftplus.Node;
 import com.gill.consensus.raftplus.ProposeHelper;
+import com.gill.consensus.raftplus.common.Utils;
 import com.gill.consensus.raftplus.entity.AppendLogEntriesParam;
 import com.gill.consensus.raftplus.entity.Reply;
-import com.gill.consensus.raftplus.machine.RaftEvent;
-import com.gill.consensus.raftplus.machine.RaftEventParams;
-
 import com.gill.consensus.raftplus.service.InnerNodeService;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -32,15 +29,18 @@ public class Leader {
 	 *            节点
 	 */
 	public static void startHeartbeatSchedule(Node self) {
+		log.debug("starting heartbeat scheduler");
 		ExecutorService heartbeatPool = self.getThreadPools().getClusterPool();
 		self.getSchedulers().setHeartbeatScheduler(() -> {
 			List<InnerNodeService> followers = self.getFollowers();
-			boolean success = Util.majorityCall(followers, follower -> doHeartbeat(self, follower), Reply::isSuccess, heartbeatPool,
-					"heartbeat");
+			log.debug("broadcast heartbeat");
+			boolean success = Utils.majorityCall(followers, follower -> doHeartbeat(self, follower), Reply::isSuccess,
+					heartbeatPool, "heartbeat");
 			if (!success) {
-				self.publishEvent(RaftEvent.NETWORK_PARTITION, RaftEventParams.builder().term(self.getTerm()).build());
+				log.debug("broadcast heartbeat failed");
+				self.stepDown();
 			}
-		}, self.getConfig());
+		}, self.getConfig(), self.getID());
 	}
 
 	private static Reply doHeartbeat(Node self, InnerNodeService follower) {
@@ -57,6 +57,7 @@ public class Leader {
 	 *            节点
 	 */
 	public static void stopHeartbeatSchedule(Node self) {
+		log.debug("stopping heartbeat scheduler");
 		self.getSchedulers().clearHeartbeatScheduler();
 	}
 
@@ -77,6 +78,7 @@ public class Leader {
 	 *            节点
 	 */
 	public static void init(Node self) {
+		log.debug("init propose helper");
 		ProposeHelper proposeHelper = self.getProposeHelper();
 		LogManager logManager = self.getLogManager();
 		int lastLogIdx = logManager.lastLog().getValue();
@@ -89,8 +91,9 @@ public class Leader {
 	 * @param self
 	 *            节点
 	 */
-	public static void stop(Node self) {
+	public static void clear(Node self) {
+		log.debug("clear propose helper");
 		ProposeHelper proposeHelper = self.getProposeHelper();
-		proposeHelper.setFollowerProxies(Collections.emptyList());
+		proposeHelper.clear();
 	}
 }

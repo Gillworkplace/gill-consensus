@@ -1,8 +1,8 @@
 package com.gill.consensus.raftplus.entity;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 /**
@@ -14,9 +14,10 @@ import lombok.experimental.SuperBuilder;
 @Getter
 @SuperBuilder
 @AllArgsConstructor
+@ToString
 public abstract class BaseParam {
 
-    private int nodeId;
+	private int nodeId;
 
-    private long term;
+	private long term;
 }

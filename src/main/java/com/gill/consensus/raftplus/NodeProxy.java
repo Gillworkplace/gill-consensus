@@ -12,13 +12,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.gill.consensus.raftplus.apis.DataStorage;
+import com.gill.consensus.raftplus.common.Utils;
 import com.gill.consensus.raftplus.entity.AppendLogEntriesParam;
 import com.gill.consensus.raftplus.entity.AppendLogReply;
 import com.gill.consensus.raftplus.entity.ReplicateSnapshotParam;
 import com.gill.consensus.raftplus.entity.Reply;
 import com.gill.consensus.raftplus.exception.SyncSnapshotException;
-import com.gill.consensus.raftplus.machine.RaftEvent;
-import com.gill.consensus.raftplus.machine.RaftEventParams;
 import com.gill.consensus.raftplus.model.LogEntry;
 import com.gill.consensus.raftplus.model.Snapshot;
 import com.gill.consensus.raftplus.service.InnerNodeService;
@@ -35,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
  * @author gill
  * @version 2023/09/11
  **/
+@SuppressWarnings("AlibabaServiceOrDaoClassShouldEndWithImpl")
 @Slf4j
 public class NodeProxy implements Runnable, PrintService {
 
@@ -85,6 +85,7 @@ public class NodeProxy implements Runnable, PrintService {
 	public void stop() {
 		running = false;
 		this.executor.shutdown();
+		Utils.awaitTermination(this.executor, "proxy-" + self.getID() + "-" + follower.getID());
 	}
 
 	/**
@@ -93,7 +94,9 @@ public class NodeProxy implements Runnable, PrintService {
 	@Override
 	public void run() {
 		while (running) {
-			waitNextLog();
+			if (skip()) {
+				continue;
+			}
 			List<LogEntryReply> entries = pollSuccessiveLogs();
 			List<LogEntry> appendLogs = entries.stream().map(LogEntryReply::getLogEntry).collect(Collectors.toList());
 			try {
@@ -101,18 +104,20 @@ public class NodeProxy implements Runnable, PrintService {
 				handleReply(entries, reply);
 			} catch (Exception e) {
 				log.error("node: {} appends logs to {} failed, e: {}", self.getID(), follower.getID(), e.getMessage());
+				putbackLogs(entries);
 			}
-			putbackLogs(entries);
 		}
 	}
 
-	private void waitNextLog() {
-		while (logs.isEmpty() || logs.firstKey() != preLogIdx + 1) {
+	private boolean skip() {
+		if (logs.isEmpty() || logs.firstKey() != preLogIdx + 1) {
 			try {
 				Thread.sleep(TIMEOUT);
 			} catch (InterruptedException ignored) {
 			}
+			return true;
 		}
+		return false;
 	}
 
 	private List<LogEntryReply> pollSuccessiveLogs() {
@@ -141,7 +146,7 @@ public class NodeProxy implements Runnable, PrintService {
 		} else if (reply.getTerm() > self.getTerm()) {
 
 			// 服务端任期大于本机，则更新任期并降级为follower
-			self.publishEvent(RaftEvent.ACCEPT_LEADER, RaftEventParams.builder().term(reply.getTerm()).build());
+			self.stepDown(reply.getTerm());
 		} else if (reply.isSyncSnapshot()) {
 
 			// 重新同步快照信息及日志

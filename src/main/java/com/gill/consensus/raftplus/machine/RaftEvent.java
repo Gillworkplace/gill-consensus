@@ -22,11 +22,6 @@ public enum RaftEvent {
 	STOP,
 
 	/**
-	 * 网络分区
-	 */
-	NETWORK_PARTITION,
-
-	/**
 	 * 接收Leader心跳包超时
 	 */
 	PING_TIMEOUT,
@@ -34,27 +29,12 @@ public enum RaftEvent {
 	/**
 	 * 预投票成功
 	 */
-	PREVOTE_SUCCESS,
-
-	/**
-	 * 预投票失败
-	 */
-	PREVOTE_FAILED,
-
-	/**
-	 * 投票超时
-	 */
-	VOTE_FAILED,
+	TO_CANDIDATE,
 
 	/**
 	 * 投票成功成为leader
 	 */
 	TO_LEADER,
-
-	/**
-	 * 收到高任期leader的心跳包
-	 */
-	ACCEPT_LEADER,
 
 	/**
 	 * 强制转换成FOLLOWER

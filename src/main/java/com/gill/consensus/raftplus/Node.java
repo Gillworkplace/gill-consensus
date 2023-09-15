@@ -3,7 +3,7 @@ package com.gill.consensus.raftplus;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -26,6 +26,7 @@ import com.gill.consensus.raftplus.machine.RaftEvent;
 import com.gill.consensus.raftplus.machine.RaftEventParams;
 import com.gill.consensus.raftplus.machine.RaftMachine;
 import com.gill.consensus.raftplus.model.LogEntry;
+import com.gill.consensus.raftplus.model.PersistentProperties;
 import com.gill.consensus.raftplus.service.ClusterService;
 import com.gill.consensus.raftplus.service.InnerNodeService;
 import com.gill.consensus.raftplus.service.PrintService;
@@ -65,14 +66,12 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 
 	protected final ThreadPools threadPools = new ThreadPools();
 
-	protected final PersistentProperties persistentProperties = new PersistentProperties();
+	protected final MetaDataManager metaDataManager;
 
 	protected RaftConfig config = new RaftConfig();
 
 	@Getter(AccessLevel.NONE)
 	protected transient final RaftMachine machine = new RaftMachine(this);
-
-	protected transient final MetaStorage metaStorage;
 
 	protected transient final DataStorage dataStorage;
 
@@ -91,83 +90,45 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 
 	public Node() {
 		ID = RandomUtil.randomInt(100, 200);
-		metaStorage = new EmptyMetaStorage();
+		metaDataManager = new MetaDataManager(new EmptyMetaStorage());
 		dataStorage = new EmptyDataStorage();
 		logManager = new LogManager(new EmptyLogStorage(), config.getLogConfig());
 	}
 
 	public Node(MetaStorage metaStorage, DataStorage dataStorage, LogStorage logStorage) {
 		ID = RandomUtil.randomInt(100, 200);
-		this.metaStorage = metaStorage;
+		metaDataManager = new MetaDataManager(metaStorage);
 		this.dataStorage = dataStorage;
 		this.logManager = new LogManager(logStorage, config.getLogConfig());
 	}
 
 	public Node(int id) {
 		ID = id;
-		metaStorage = new EmptyMetaStorage();
+		metaDataManager = new MetaDataManager(new EmptyMetaStorage());
 		dataStorage = new EmptyDataStorage();
 		logManager = new LogManager(new EmptyLogStorage(), config.getLogConfig());
 	}
 
 	public Node(int id, MetaStorage metaStorage, DataStorage dataStorage, LogStorage logStorage) {
 		ID = id;
-		this.metaStorage = metaStorage;
+		metaDataManager = new MetaDataManager(metaStorage);
 		this.dataStorage = dataStorage;
 		this.logManager = new LogManager(logStorage, config.getLogConfig());
 	}
 
 	public long getTerm() {
-		return this.persistentProperties.getTerm();
+		return this.metaDataManager.getTerm();
 	}
 
 	/**
-	 * 任期增长
-	 *
-	 * @param casTerm
-	 *            原任期
-	 * @param votedFor
-	 *            已投服务器
-	 * @return 任期
-	 */
-	public long increaseTerm(long casTerm, int votedFor) {
-		lock.lock();
-		try {
-			long term = persistentProperties.getTerm();
-			if (casTerm != term) {
-				return -1;
-			}
-			return setTermAndVotedFor(term + 1, votedFor);
-		} finally {
-			lock.unlock();
-		}
-	}
-
-	/**
-	 * 强制设置最新任期和投票人
+	 * 自增任期
 	 * 
-	 * @param term
-	 *            任期
-	 * @param votedFor
-	 *            投票人
-	 * @return term
+	 * @param originTerm
+	 *            起始任期
+	 * @return originTerm + 1, -1表示选举自己失败
 	 */
-	public long setTermAndVotedFor(long term, Integer votedFor) {
-		lock.lock();
-		try {
-			CompletableFuture<Void> future1 = CompletableFuture.completedFuture(null);
-			if (term > getTerm()) {
-				this.persistentProperties.setTerm(term);
-				this.persistentProperties.setVotedFor(votedFor);
-				future1 = CompletableFuture.runAsync(this::refreshLastHeartbeatTimestamp);
-			}
-			CompletableFuture<Void> future2 = CompletableFuture
-					.runAsync(() -> metaStorage.write(this.persistentProperties));
-			CompletableFuture.allOf(future1, future2);
-			return this.persistentProperties.getTerm();
-		} finally {
-			lock.unlock();
-		}
+	public long electSelf(long originTerm) {
+		return metaDataManager.increaseTerm(originTerm, ID);
 	}
 
 	public int getCommittedIdx() {
@@ -199,7 +160,7 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 
 	private void initMeta() {
 		log.debug("initialize metadata...");
-		persistentProperties.set(metaStorage.read());
+		metaDataManager.init();
 		log.debug("finish initializing metadata.");
 	}
 
@@ -244,9 +205,43 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 	}
 
 	/**
+	 * 降级为follower
+	 */
+	public void stepDown() {
+		stepDown(getTerm());
+	}
+
+	/**
+	 * 降级为follower
+	 */
+	public void stepDown(long newTerm) {
+		stepDown(newTerm, false);
+	}
+
+	/**
+	 * 降级为follower
+	 */
+	public void stepDown(long newTerm, boolean sync) {
+		if (this.metaDataManager.acceptHigherOrSameTerm(newTerm)) {
+			log.debug("node: {} step down", ID);
+			this.machine.publishEvent(RaftEvent.FORCE_FOLLOWER, new RaftEventParams(Integer.MAX_VALUE, sync));
+		}
+	}
+
+	private boolean voteFor(long newTerm, int nodeId) {
+		if (this.metaDataManager.voteFor(newTerm, nodeId)) {
+			refreshLastHeartbeatTimestamp();
+			this.machine.publishEvent(RaftEvent.FORCE_FOLLOWER, new RaftEventParams(Integer.MAX_VALUE, true));
+			return true;
+		}
+		return false;
+	}
+
+	/**
 	 * 刷新心跳时间
 	 */
 	private void refreshLastHeartbeatTimestamp() {
+		log.debug("node: {} refresh heartbeat timestamp", ID);
 		heartbeatState.set(getTerm(), System.currentTimeMillis());
 	}
 
@@ -255,7 +250,7 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 		return machine.isReady();
 	}
 
-	private boolean invalidateLog(long lastLogTerm, long lastLogIdx) {
+	private boolean unlatestLog(long lastLogTerm, long lastLogIdx) {
 		Pair<Long, Integer> pair = logManager.lastLog();
 		return lastLogTerm <= pair.getKey() && (lastLogTerm != pair.getKey() || lastLogIdx < pair.getValue());
 	}
@@ -266,37 +261,32 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 		// 成功条件：
 		// · 参数中的任期更大，或任期相同但日志索引更大
 		// · 至少一次选举超时时间内没有收到领导者心跳
-		lock.lock();
-		try {
-			log.debug("node: {} receives PRE_VOTE , param: {}", ID, param);
-			long pTerm = param.getTerm();
-			long term = persistentProperties.getTerm();
+		log.debug("node: {} receives PRE_VOTE, param: {}", ID, param);
+		long pTerm = param.getTerm();
+		PersistentProperties properties = metaDataManager.getProperties();
+		long term = properties.getTerm();
 
-			// 版本太低 丢弃
-			if (pTerm < term) {
-				log.debug("node: {} discards PRE_VOTE for the old vote's term, client id: {}", ID, param.getNodeId());
-				return new Reply(false, term);
-			}
-
-			// 日志不够新 丢弃
-			if (pTerm == term && invalidateLog(param.getLastLogTerm(), param.getLastLogIdx())) {
-				log.debug("node: {} discards PRE_VOTE for the old vote's log-index, client id: {}", ID,
-						param.getNodeId());
-				return new Reply(false, term);
-			}
-
-			// 该节点还未超时
-			Pair<Long, Long> pair = heartbeatState.get();
-			if (System.currentTimeMillis() - pair.getValue() < config.getTimeoutInterval()) {
-				log.debug("node: {} discards PRE_VOTE, because the node is not timeout, client id: {}", ID,
-						param.getNodeId());
-				return new Reply(false, term);
-			}
-			log.info("node: {} accepts PRE_VOTE, client id: {}", ID, param.getNodeId());
-			return new Reply(true, term);
-		} finally {
-			lock.unlock();
+		// 版本太低 丢弃
+		if (pTerm < term) {
+			log.debug("node: {} discards PRE_VOTE for the old vote's term, client id: {}", ID, param.getNodeId());
+			return new Reply(false, term);
 		}
+
+		// 日志不够新 丢弃
+		if (pTerm == term && unlatestLog(param.getLastLogTerm(), param.getLastLogIdx())) {
+			log.debug("node: {} discards PRE_VOTE for the old vote's log-index, client id: {}", ID, param.getNodeId());
+			return new Reply(false, term);
+		}
+
+		// 该节点还未超时
+		Pair<Long, Long> pair = heartbeatState.get();
+		if (System.currentTimeMillis() - pair.getValue() < config.getTimeoutInterval()) {
+			log.debug("node: {} discards PRE_VOTE, because the node is not timeout, client id: {}", ID,
+					param.getNodeId());
+			return new Reply(false, term);
+		}
+		log.info("node: {} accepts PRE_VOTE, client id: {}", ID, param.getNodeId());
+		return new Reply(true, term);
 	}
 
 	@Override
@@ -304,39 +294,39 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 		lock.lock();
 		try {
 			log.debug("node: {} receives REQUEST_VOTE, param: {}", ID, param);
+			int nodeId = param.getNodeId();
 			long pTerm = param.getTerm();
-			long term = persistentProperties.getTerm();
+
+			PersistentProperties properties = metaDataManager.getProperties();
+			long cTerm = properties.getTerm();
+			Integer cVotedFor = properties.getVotedFor();
 
 			// 版本太低 丢弃
-			if (pTerm < term) {
-				log.debug("node: {} discards REQUEST_VOTE for the old vote's term, client id: {}", ID,
-						param.getNodeId());
-				return new Reply(false, term);
+			if (pTerm < cTerm) {
+				log.debug("node: {} discards REQUEST_VOTE for the old vote's cTerm, client id: {}", ID, nodeId);
+				return new Reply(false, cTerm);
 			}
 
-			Integer votedFor = persistentProperties.getVotedFor();
-
 			// 当前任期已投票
-			if (pTerm == term && votedFor != null && votedFor != param.getNodeId()) {
+			if (pTerm == cTerm && cVotedFor != null && cVotedFor != nodeId) {
 				log.debug(
 						"node: {} discards REQUEST_VOTE, because node was voted for {} when term was {}, client id: {}",
-						ID, votedFor, pTerm, param.getNodeId());
+						ID, cVotedFor, pTerm, nodeId);
 				return new Reply(false, pTerm);
 			}
 
 			// 日志不够新 丢弃
-			if (invalidateLog(param.getLastLogTerm(), param.getLastLogIdx())) {
-				log.debug("node: {} discards REQUEST_VOTE for the old vote's log-index, client id: {}", ID,
-						param.getNodeId());
+			if (unlatestLog(param.getLastLogTerm(), param.getLastLogIdx())) {
+				log.debug("node: {} discards REQUEST_VOTE for the old vote's log-index, client id: {}", ID, nodeId);
 				return new Reply(false, pTerm);
 			}
 
-			if (pTerm > term) {
-				setTermAndVotedFor(pTerm, param.getNodeId());
+			if (voteFor(pTerm, nodeId)) {
+				log.info("node: {} REQUEST_VOTE has voted for {}, term: {}", ID, nodeId, pTerm);
+				return new Reply(true, pTerm);
 			}
-			this.publishEvent(RaftEvent.FORCE_FOLLOWER, RaftEventParams.EMPTY);
-			log.info("node: {} accepts REQUEST_VOTE, client id: {}", ID, param.getNodeId());
-			return new Reply(true, pTerm);
+			log.debug("node: {} REQUEST_VOTE vote for term {} id {} failed ", ID, pTerm, nodeId);
+			return new Reply(false, pTerm);
 		} finally {
 			lock.unlock();
 		}
@@ -344,31 +334,22 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 
 	@Override
 	public AppendLogReply doAppendLogEntries(AppendLogEntriesParam param) {
-		long term = getTerm();
-		long pTerm = param.getTerm();
-		if (term > pTerm) {
-			return new AppendLogReply(false, term);
-		}
 		lock.lock();
 		try {
-			term = getTerm();
-			if (pTerm > term) {
-				log.info("node: {} receive higher term {} message from {}", ID, pTerm, param.getNodeId());
-				publishEvent(RaftEvent.ACCEPT_LEADER,
-						RaftEventParams.builder().term(pTerm).votedFor(param.getNodeId()).build());
+			long term = getTerm();
+			long pTerm = param.getTerm();
+			if (term > pTerm) {
+				return new AppendLogReply(false, term);
 			}
 			refreshLastHeartbeatTimestamp();
+			stepDown(pTerm, true);
 
 			// 没有logs属性的为ping请求
 			if (param.getLogs() == null || param.getLogs().isEmpty()) {
-				log.trace("node: {} receive heartbeat from {}", ID, param.getNodeId());
+				log.debug("node: {} receive heartbeat from {}", ID, param.getNodeId());
 				return new AppendLogReply(true, pTerm);
 			}
-			if (pTerm > term) {
 
-				// 返回失败等待节点变为follower后重试appendlogs。
-				return new AppendLogReply(false, pTerm);
-			}
 			log.debug("node: {} receive appends log from {}", ID, param.getNodeId());
 
 			// 日志一致性检查
@@ -407,6 +388,7 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 
 			// 更新committedIdx
 			setCommittedIdx(param.getCommitIdx());
+			refreshLastHeartbeatTimestamp();
 			return new AppendLogReply(true, pTerm);
 		} finally {
 			lock.unlock();
@@ -417,11 +399,15 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 	public Reply doReplicateSnapshot(ReplicateSnapshotParam param) {
 		lock.lock();
 		try {
+			log.debug("node: {} replicate snapshot from {}, term is {}, apply{idx={}, term={}}", ID, param.getNodeId(),
+					param.getTerm(), param.getApplyIdx(), param.getApplyTerm());
 			long pTerm = param.getTerm();
 			long term = getTerm();
 			if (pTerm < term) {
 				return new Reply(false, term);
 			}
+			refreshLastHeartbeatTimestamp();
+			stepDown(pTerm, true);
 			long applyLogTerm = param.getApplyTerm();
 			int applyIdx = param.getApplyIdx();
 			byte[] data = param.getData();
@@ -440,14 +426,13 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 		this.nodes = new ArrayList<>(nodes);
 		this.followers = nodes.stream().filter(node -> this != node).collect(Collectors.toList());
 		loadData();
-		RaftEventParams params = RaftEventParams.builder().term(getTerm()).build();
-		this.publishEvent(RaftEvent.INIT, params);
+		this.publishEvent(RaftEvent.INIT, new RaftEventParams(getTerm()));
 	}
 
 	@Override
 	public synchronized void stop() {
-		RaftEventParams params = RaftEventParams.builder().term(getTerm()).build();
-		this.publishEvent(RaftEvent.STOP, params);
+		this.publishEvent(RaftEvent.STOP, new RaftEventParams(Integer.MAX_VALUE, true));
+		this.machine.stop();
 	}
 
 	@Override
@@ -476,11 +461,30 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 		StringBuilder sb = new StringBuilder();
 		sb.append("===================").append(System.lineSeparator());
 		sb.append("node id: ").append(ID).append("\t").append(machine.getState().name()).append(System.lineSeparator());
-		sb.append("persistent properties: ").append(persistentProperties).append(System.lineSeparator());
+		sb.append("persistent properties: ").append(metaDataManager.println()).append(System.lineSeparator());
 		sb.append("committed idx: ").append(getCommittedIdx()).append(System.lineSeparator());
 		sb.append("heartbeat state: ").append(heartbeatState).append(System.lineSeparator());
 		sb.append("nodes: ").append(nodes).append(System.lineSeparator());
 		sb.append("followers: ").append(followers).append(System.lineSeparator());
+		sb.append("===================").append(System.lineSeparator());
+		sb.append("THREAD POOL").append(System.lineSeparator());
+		sb.append("cluster pool: ")
+				.append(Optional.ofNullable(threadPools.getClusterPool()).map(Object::toString).orElse("none"))
+				.append(System.lineSeparator());
+		sb.append("api pool: ")
+				.append(Optional.ofNullable(threadPools.getApiPool()).map(Object::toString).orElse("none"))
+				.append(System.lineSeparator());
+		sb.append("===================").append(System.lineSeparator());
+		sb.append("SCHEDULER").append(System.lineSeparator());
+		sb.append("timeout scheduler: ")
+				.append(Optional.ofNullable(schedulers.getTimeoutScheduler()).map(Object::toString).orElse("none"))
+				.append(System.lineSeparator());
+		sb.append("heartbeat scheduler: ")
+				.append(Optional.ofNullable(schedulers.getHeartbeatScheduler()).map(Object::toString).orElse("none"))
+				.append(System.lineSeparator());
+		sb.append("===================").append(System.lineSeparator());
+		sb.append("STATE MACHINE").append(System.lineSeparator());
+		sb.append(machine.println()).append(System.lineSeparator());
 		sb.append("===================").append(System.lineSeparator());
 		sb.append("CONFIG").append(System.lineSeparator());
 		sb.append(config.toString()).append(System.lineSeparator());
@@ -499,6 +503,6 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 
 	@Override
 	public String toString() {
-		return String.format("node id: %s, state: %s", ID, machine.getState());
+		return String.format("id=%s,state=%s,term=%s;", ID, machine.getState(), getTerm());
 	}
 }

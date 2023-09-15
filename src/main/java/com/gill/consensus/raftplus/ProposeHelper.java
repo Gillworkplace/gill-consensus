@@ -3,13 +3,14 @@ package com.gill.consensus.raftplus;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import com.gill.consensus.common.Util;
+import com.gill.consensus.raftplus.common.Utils;
 import com.gill.consensus.raftplus.entity.Reply;
 import com.gill.consensus.raftplus.model.LogEntry;
 import com.gill.consensus.raftplus.service.InnerNodeService;
@@ -63,10 +64,6 @@ public class ProposeHelper implements PrintService {
 		this.supplier = supplier;
 	}
 
-	public void setFollowerProxies(List<NodeProxy> followerProxies) {
-		this.followerProxies = followerProxies;
-	}
-
 	/**
 	 * 启动
 	 * 
@@ -87,10 +84,14 @@ public class ProposeHelper implements PrintService {
 	/**
 	 * 停止
 	 */
-	public void stop() {
+	public void clear() {
 		List<NodeProxy> proxies = followerProxies;
 		followerProxies = Collections.emptyList();
-		proxies.forEach(NodeProxy::stop);
+		log.info("start to clear propose helper's proxies");
+		CompletableFuture<?>[] futures = proxies.stream().map(proxy -> CompletableFuture.runAsync(proxy::stop))
+				.toArray(CompletableFuture[]::new);
+		CompletableFuture.allOf(futures).join();
+		log.info("finish clearing propose helper's proxies");
 	}
 
 	/**
@@ -103,7 +104,7 @@ public class ProposeHelper implements PrintService {
 	public int propose(LogEntry logEntry, Runnable dataStorageApplier) {
 		int logIdx = logEntry.getIndex();
 		proposeQueue.put(logIdx, new WaitLogEntry(Thread.currentThread(), logEntry));
-		boolean success = Util.majorityCall(followerProxies, proxy -> proxy.appendLog(logEntry), Reply::isSuccess,
+		boolean success = Utils.majorityCall(followerProxies, proxy -> proxy.appendLog(logEntry), Reply::isSuccess,
 				supplier.get(), "propose");
 		if (success) {
 			int count = 0;

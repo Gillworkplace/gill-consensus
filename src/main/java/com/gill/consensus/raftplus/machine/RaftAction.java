@@ -9,12 +9,15 @@ import com.gill.consensus.raftplus.state.Follower;
 import com.gill.consensus.raftplus.state.Leader;
 import com.gill.consensus.raftplus.state.PreCandidate;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * RaftAction
  *
  * @author gill
  * @version 2023/09/04
  **/
+@Slf4j
 public enum RaftAction {
 
 	/**
@@ -34,19 +37,16 @@ public enum RaftAction {
 	STOP((node, params) -> Common.stop(node)),
 
 	/**
-	 * 收到leader心跳包
-	 */
-	ACCEPT_LEADER(Common::acceptHigherLeader),
-
-	/**
 	 * 成为follower
 	 */
-	POST_FOLLOWER((node, params) -> Follower.startTimeoutSchedule(node)),
+	POST_FOLLOWER((node, params) -> {
+		Follower.startTimeoutScheduler(node);
+	}),
 
 	/**
 	 * 移除follower定时任务
 	 */
-	REMOVE_FOLLOWER_SCHEDULER((node, params) -> Follower.stopTimeoutSchedule(node)),
+	REMOVE_FOLLOWER_SCHEDULER((node, params) -> Follower.stopTimeoutScheduler(node)),
 
 	/**
 	 * 成为预候选者
@@ -64,7 +64,9 @@ public enum RaftAction {
 	POST_LEADER((node, params) -> {
 		Leader.init(node);
 		Leader.startHeartbeatSchedule(node);
-//		Leader.noOp(node);
+		log.debug("become to leader when term is {}", params.getTerm());
+		log.debug(node.println());
+		// Leader.noOp(node);
 	}),
 
 	/**
@@ -72,7 +74,7 @@ public enum RaftAction {
 	 */
 	REMOVE_LEADER_SCHEDULER((node, params) -> {
 		Leader.stopHeartbeatSchedule(node);
-		Leader.stop(node);
+		Leader.clear(node);
 	});
 
 	private final BiConsumer<Node, RaftEventParams> func;

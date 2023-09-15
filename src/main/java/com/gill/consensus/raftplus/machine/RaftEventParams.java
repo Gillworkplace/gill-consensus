@@ -1,7 +1,9 @@
 package com.gill.consensus.raftplus.machine;
 
-import lombok.Builder;
 import lombok.Getter;
+import lombok.Setter;
+
+import java.util.concurrent.CountDownLatch;
 
 /**
  * RaftEventParams
@@ -9,13 +11,22 @@ import lombok.Getter;
  * @author gill
  * @version 2023/09/04
  **/
-@Builder
+@Setter
 @Getter
 public class RaftEventParams {
 
-	public static final RaftEventParams EMPTY = new RaftEventParams(-1, -1);
-
 	private long term;
 
-	private int votedFor;
+	private boolean sync;
+
+	private CountDownLatch latch = new CountDownLatch(1);
+
+	public RaftEventParams(long term) {
+		this.term = term;
+	}
+
+	public RaftEventParams(long term, boolean sync) {
+		this.term = term;
+		this.sync = sync;
+	}
 }

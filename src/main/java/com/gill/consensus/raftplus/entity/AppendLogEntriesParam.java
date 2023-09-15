@@ -4,7 +4,6 @@ import java.util.List;
 
 import com.gill.consensus.raftplus.model.LogEntry;
 
-import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;

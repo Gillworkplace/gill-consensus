@@ -1,7 +1,8 @@
 package com.gill.consensus.raftplus.state;
 
+import java.util.concurrent.CompletableFuture;
+
 import com.gill.consensus.raftplus.Node;
-import com.gill.consensus.raftplus.machine.RaftEventParams;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,19 +22,10 @@ public class Common {
 	 *            节点
 	 */
 	public static void stop(Node self) {
-		self.getThreadPools().setClusterPool(null);
-		self.getThreadPools().setApiPool(null);
-	}
-
-	/**
-	 * 处理版本号更高的leader心跳通知
-	 * 
-	 * @param self
-	 *            节点
-	 * @param params
-	 *            参数
-	 */
-	public static void acceptHigherLeader(Node self, RaftEventParams params) {
-		self.setTermAndVotedFor(params.getTerm(), params.getVotedFor());
+		log.debug("pre-stop, state: {}", self.println());
+		CompletableFuture<Void> f1 = CompletableFuture.runAsync(() -> self.getThreadPools().setClusterPool(null));
+		CompletableFuture<Void> f2 = CompletableFuture.runAsync(() -> self.getThreadPools().setApiPool(null));
+		CompletableFuture.allOf(f1, f2).join();
+		log.debug("post-stop, state: {}", self.println());
 	}
 }

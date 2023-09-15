@@ -3,9 +3,10 @@ package com.gill.consensus.raftplus.state;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-import com.gill.consensus.common.Util;
+import cn.hutool.core.util.RandomUtil;
 import com.gill.consensus.raftplus.LogManager;
 import com.gill.consensus.raftplus.Node;
+import com.gill.consensus.raftplus.common.Utils;
 import com.gill.consensus.raftplus.entity.Reply;
 import com.gill.consensus.raftplus.entity.RequestVoteParam;
 import com.gill.consensus.raftplus.machine.RaftEvent;
@@ -33,23 +34,28 @@ public class Candidate {
 	 *            params
 	 */
 	public static void vote(Node self, RaftEventParams params) {
-		ExecutorService clusterPool = self.getThreadPools().getClusterPool();
-		List<InnerNodeService> followers = self.getFollowers();
-		long nextTerm = self.increaseTerm(params.getTerm(), self.getID());
+		long pTerm = params.getTerm();
+		long nextTerm = self.electSelf(pTerm);
 
 		// 该节点已投票，直接返回失败
 		if (nextTerm == -1) {
-			self.publishEvent(RaftEvent.VOTE_FAILED, RaftEventParams.builder().term(self.getTerm()).build());
+			log.debug("vote for self failed when pTerm: {}, cTerm: {}", pTerm, self.getTerm());
+			self.stepDown();
 			return;
 		}
-		log.info("node: {} vote for self when term: {}", self.getID(), nextTerm);
-		boolean success = Util.majorityCall(followers, follower -> doVote(self, follower, nextTerm), Reply::isSuccess,
+		log.info("vote for self when term: {}", nextTerm);
+		ExecutorService clusterPool = self.getThreadPools().getClusterPool();
+		List<InnerNodeService> followers = self.getFollowers();
+		boolean success = Utils.majorityCall(followers, follower -> doVote(self, follower, nextTerm), Reply::isSuccess,
 				clusterPool, "vote");
 		if (success) {
-			self.publishEvent(RaftEvent.TO_LEADER, RaftEventParams.builder().term(nextTerm).build());
-			log.debug("node: {} become to leader when term is {}", self.getID(), nextTerm);
+			self.publishEvent(RaftEvent.TO_LEADER, new RaftEventParams(nextTerm));
 		} else {
-			self.publishEvent(RaftEvent.VOTE_FAILED, RaftEventParams.builder().term(self.getTerm()).build());
+			log.debug("request vote failed when term: {}", nextTerm);
+
+			// 增加随机时间
+			Utils.sleepQuietly(RandomUtil.randomInt(10));
+			self.stepDown();
 		}
 	}
 
