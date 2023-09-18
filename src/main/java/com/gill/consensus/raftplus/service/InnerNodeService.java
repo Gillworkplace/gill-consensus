@@ -1,5 +1,6 @@
 package com.gill.consensus.raftplus.service;
 
+import com.gill.consensus.raftplus.common.Utils;
 import com.gill.consensus.raftplus.entity.AppendLogEntriesParam;
 import com.gill.consensus.raftplus.entity.AppendLogReply;
 import com.gill.consensus.raftplus.entity.PreVoteParam;
@@ -33,7 +34,7 @@ public interface InnerNodeService extends NodeService {
 		if (!ready()) {
 			return new Reply(false, -1);
 		}
-		return doPreVote(param);
+		return Utils.cost(() -> doPreVote(param), "pre-vote");
 	}
 
 	/**
@@ -56,7 +57,7 @@ public interface InnerNodeService extends NodeService {
 		if (!ready()) {
 			return new Reply(false, -1);
 		}
-		return doRequestVote(param);
+		return Utils.cost(() -> doRequestVote(param), "request-vote");
 	}
 
 	/**
@@ -79,7 +80,7 @@ public interface InnerNodeService extends NodeService {
 		if (!ready()) {
 			return new AppendLogReply(false, -1);
 		}
-		return doAppendLogEntries(param);
+		return Utils.cost(() -> doAppendLogEntries(param), "append-log-entries");
 	}
 
 	/**
@@ -102,7 +103,7 @@ public interface InnerNodeService extends NodeService {
 		if (!ready()) {
 			return new AppendLogReply(false, -1);
 		}
-		return doReplicateSnapshot(param);
+		return Utils.cost(() -> doReplicateSnapshot(param), "replicate-snapshot");
 	}
 
 	/**

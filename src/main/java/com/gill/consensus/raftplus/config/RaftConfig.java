@@ -17,7 +17,9 @@ public class RaftConfig {
 
 	private long heartbeatInterval = 100L;
 
-	private long timeoutInterval = 300L;
+	private long baseTimeoutInterval = 300L;
+
+	private long checkTimeoutInterval = 100L;
 
 	private long timeoutRandomFactor = 150;
 

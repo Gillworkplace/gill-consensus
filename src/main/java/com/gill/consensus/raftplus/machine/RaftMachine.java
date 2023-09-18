@@ -44,29 +44,31 @@ public class RaftMachine implements PrintService {
 		table.put(RaftState.FOLLOWER, RaftEvent.PING_TIMEOUT,
 				Target.of(ImmutableList.of(RaftAction.REMOVE_FOLLOWER_SCHEDULER), RaftState.PRE_CANDIDATE,
 						ImmutableList.of(RaftAction.TO_PRE_CANDIDATE)));
-		table.put(RaftState.FOLLOWER, RaftEvent.FORCE_FOLLOWER, Target.of(RaftState.FOLLOWER));
-		table.put(RaftState.FOLLOWER, RaftEvent.STOP,
-				Target.of(ImmutableList.of(RaftAction.REMOVE_FOLLOWER_SCHEDULER, RaftAction.STOP), RaftState.STRANGER));
+		table.put(RaftState.FOLLOWER, RaftEvent.STOP, Target.of(
+				ImmutableList.of(RaftAction.PRE_STOP, RaftAction.REMOVE_FOLLOWER_SCHEDULER, RaftAction.CLEAR_POOL),
+				RaftState.STRANGER, ImmutableList.of(RaftAction.POST_STOP)));
 
 		table.put(RaftState.PRE_CANDIDATE, RaftEvent.TO_CANDIDATE,
 				Target.of(RaftState.CANDIDATE, ImmutableList.of(RaftAction.POST_CANDIDATE)));
 		table.put(RaftState.PRE_CANDIDATE, RaftEvent.FORCE_FOLLOWER,
 				Target.of(RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
 		table.put(RaftState.PRE_CANDIDATE, RaftEvent.STOP,
-				Target.of(ImmutableList.of(RaftAction.STOP), RaftState.STRANGER));
+				Target.of(ImmutableList.of(RaftAction.PRE_STOP, RaftAction.CLEAR_POOL), RaftState.STRANGER,
+						ImmutableList.of(RaftAction.POST_STOP)));
 
-		table.put(RaftState.CANDIDATE, RaftEvent.TO_LEADER,
-				Target.of(RaftState.LEADER, ImmutableList.of(RaftAction.POST_LEADER)));
+		table.put(RaftState.CANDIDATE, RaftEvent.TO_LEADER, Target.of(ImmutableList.of(RaftAction.INIT_LEADER),
+				RaftState.LEADER, ImmutableList.of(RaftAction.POST_LEADER)));
 		table.put(RaftState.CANDIDATE, RaftEvent.FORCE_FOLLOWER,
 				Target.of(RaftState.FOLLOWER, ImmutableList.of(RaftAction.POST_FOLLOWER)));
 		table.put(RaftState.CANDIDATE, RaftEvent.STOP,
-				Target.of(ImmutableList.of(RaftAction.STOP), RaftState.STRANGER));
+				Target.of(ImmutableList.of(RaftAction.PRE_STOP, RaftAction.CLEAR_POOL), RaftState.STRANGER,
+						ImmutableList.of(RaftAction.POST_STOP)));
 
 		table.put(RaftState.LEADER, RaftEvent.FORCE_FOLLOWER,
 				Target.of(ImmutableList.of(RaftAction.REMOVE_LEADER_SCHEDULER), RaftState.FOLLOWER,
 						ImmutableList.of(RaftAction.POST_FOLLOWER)));
-		table.put(RaftState.LEADER, RaftEvent.STOP,
-				Target.of(ImmutableList.of(RaftAction.REMOVE_LEADER_SCHEDULER, RaftAction.STOP), RaftState.STRANGER));
+		table.put(RaftState.LEADER, RaftEvent.STOP, Target.of(ImmutableList.of(RaftAction.PRE_STOP), RaftState.STRANGER,
+				ImmutableList.of(RaftAction.REMOVE_LEADER_SCHEDULER, RaftAction.CLEAR_POOL, RaftAction.POST_STOP)));
 	}
 
 	private RaftState state;
@@ -90,6 +92,7 @@ public class RaftMachine implements PrintService {
 	 */
 	public RaftMachine start() {
 		log.info("machine is starting");
+		eventQueue.clear();
 
 		// 该方法为单线程执行，没有线程安全问题
 		executor.execute(() -> {
@@ -105,12 +108,12 @@ public class RaftMachine implements PrintService {
 
 					// 状态和事件对不上说明优先级高的Accept Leader事件被处理了，旧的事件可以抛弃不处理了。
 					if (target == null) {
-						log.info("ignore event {}. current state {}", event, state);
+						log.trace("ignore event {}. current state {}", event, state);
 						tagCompleted(entry, params);
 						continue;
 					}
 					if (node.getTerm() > params.getTerm()) {
-						log.info("discard event {}. current term {}, event term: {}", event, node.getTerm(),
+						log.debug("discard event {}. current term {}, event term: {}", event, node.getTerm(),
 								params.getTerm());
 						tagCompleted(entry, params);
 						continue;
@@ -121,13 +124,15 @@ public class RaftMachine implements PrintService {
 
 					// 转换状态
 					this.state = target.getTargetState();
+					log.debug("to be {}", state.name());
 
 					// 执行post动作
 					postActions(event, params, target);
 					tagCompleted(entry, params);
-					log.debug("to be {}", state.name());
 				} catch (InterruptedException e) {
 					log.warn(e.toString());
+				} catch (Exception e) {
+					log.error("machine exception: {}", e.toString());
 				}
 			}
 			log.info("machine exits");
@@ -191,7 +196,7 @@ public class RaftMachine implements PrintService {
 		} else {
 			eventQueue.offerLast(entry);
 		}
-		if (params.isSync()) {
+		if (running && params.isSync()) {
 			try {
 				params.getLatch().await();
 			} catch (InterruptedException e) {

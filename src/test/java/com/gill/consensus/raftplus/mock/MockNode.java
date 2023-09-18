@@ -1,12 +1,10 @@
 package com.gill.consensus.raftplus.mock;
 
+import java.util.List;
+
 import com.gill.consensus.raftplus.Node;
 import com.gill.consensus.raftplus.machine.RaftState;
 import com.gill.consensus.raftplus.model.LogEntry;
-import com.gill.consensus.raftplus.service.InnerNodeService;
-
-import java.util.List;
-import java.util.Map;
 
 /**
  * MockNode
@@ -16,22 +14,27 @@ import java.util.Map;
  **/
 public class MockNode extends Node implements TestMethod {
 
-    public MockNode(int id) {
-        super(id);
-    }
+	public MockNode(int id) {
+		super(id);
+	}
 
-    @Override
-    public boolean isLeader() {
-        return machine.getState() == RaftState.LEADER;
-    }
+	@Override
+	public boolean isUp() {
+		return machine.getState() != RaftState.STRANGER;
+	}
 
-    @Override
-    public boolean isFollower() {
-        return machine.getState() == RaftState.FOLLOWER;
-    }
+	@Override
+	public boolean isLeader() {
+		return machine.getState() == RaftState.LEADER;
+	}
 
-    @Override
-    public List<LogEntry> getLog() {
-        return logManager.getLogs(0, Integer.MAX_VALUE);
-    }
+	@Override
+	public boolean isFollower() {
+		return machine.getState() == RaftState.FOLLOWER;
+	}
+
+	@Override
+	public List<LogEntry> getLog() {
+		return logManager.getLogs(0, Integer.MAX_VALUE);
+	}
 }

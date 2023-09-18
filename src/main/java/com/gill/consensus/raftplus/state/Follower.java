@@ -33,16 +33,19 @@ public class Follower {
 	 */
 	public static void startTimeoutScheduler(Node self) {
 		log.debug("starting timeout scheduler");
+		RaftConfig config = self.getConfig();
 		self.getSchedulers().setTimeoutScheduler(() -> {
-			RaftConfig config = self.getConfig();
+			RaftConfig newConfig = self.getConfig();
 			Pair<Long, Long> pair = self.getHeartbeatState().get();
 			long lastHeartbeatTimestamp = pair.getValue();
 			long now = System.currentTimeMillis();
-			if (now - lastHeartbeatTimestamp <= config.getTimeoutInterval()) {
+			long diff = now - lastHeartbeatTimestamp;
+			if (diff <= newConfig.getBaseTimeoutInterval() + self.getPriority() * 100L) {
 				return;
 			}
+			self.unstable();
 			self.publishEvent(RaftEvent.PING_TIMEOUT, new RaftEventParams(self.getTerm()));
-		}, self.getConfig(), self.getID());
+		}, config.getCheckTimeoutInterval() + self.getPriority() * 2L, self.getID());
 	}
 
 	/**
@@ -68,7 +71,7 @@ public class Follower {
 		self.getThreadPools()
 				// .setClusterPool(new ThreadPoolExecutor(followers.size() + 1, followers.size()
 				// + 1, 0,
-				.setClusterPool(new ThreadPoolExecutor(100, 100, 0, TimeUnit.MILLISECONDS,
+				.setClusterPool(new ThreadPoolExecutor(followers.size() + 1, 100, 0, TimeUnit.MILLISECONDS,
 						new LinkedBlockingQueue<>(Collections.emptyList()), r -> new Thread(r, "cluster-" + nodeId),
 						(r, executor) -> log.warn("Node {} discards extra heartbeat thread", nodeId)));
 		self.getThreadPools().setApiPool(new ThreadPoolExecutor(Util.CPU_CORES * 2 + 1, Util.CPU_CORES * 4 + 2, 600,

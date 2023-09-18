@@ -46,7 +46,7 @@ public class PreCandidate {
 			log.debug("pre-vote failed when term: {}", pTerm);
 
 			// 增加随机时间
-			Utils.sleepQuietly(RandomUtil.randomInt(50));
+			Utils.sleepQuietly(RandomUtil.randomInt(10));
 			self.stepDown();
 		}
 	}

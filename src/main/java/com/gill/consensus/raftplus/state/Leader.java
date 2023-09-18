@@ -8,7 +8,9 @@ import com.gill.consensus.raftplus.Node;
 import com.gill.consensus.raftplus.ProposeHelper;
 import com.gill.consensus.raftplus.common.Utils;
 import com.gill.consensus.raftplus.entity.AppendLogEntriesParam;
+import com.gill.consensus.raftplus.entity.AppendLogReply;
 import com.gill.consensus.raftplus.entity.Reply;
+import com.gill.consensus.raftplus.machine.RaftEventParams;
 import com.gill.consensus.raftplus.service.InnerNodeService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -28,26 +30,39 @@ public class Leader {
 	 * @param self
 	 *            节点
 	 */
-	public static void startHeartbeatSchedule(Node self) {
+	public static void startHeartbeatSchedule(Node self, RaftEventParams params) {
 		log.debug("starting heartbeat scheduler");
 		ExecutorService heartbeatPool = self.getThreadPools().getClusterPool();
+		int selfId = self.getID();
+		long term = params.getTerm();
 		self.getSchedulers().setHeartbeatScheduler(() -> {
 			List<InnerNodeService> followers = self.getFollowers();
 			log.debug("broadcast heartbeat");
-			boolean success = Utils.majorityCall(followers, follower -> doHeartbeat(self, follower), Reply::isSuccess,
-					heartbeatPool, "heartbeat");
+			boolean success = Utils.majorityCall(followers,
+					follower -> doHeartbeat(selfId, term, follower, self::unstable), Reply::isSuccess, heartbeatPool,
+					"heartbeat");
 			if (!success) {
-				log.debug("broadcast heartbeat failed");
+				log.warn("broadcast heartbeat failed");
 				self.stepDown();
 			}
-		}, self.getConfig(), self.getID());
+		}, self.getConfig(), selfId);
 	}
 
-	private static Reply doHeartbeat(Node self, InnerNodeService follower) {
-		int nodeId = self.getID();
-		long term = self.getTerm();
+	private static Reply doHeartbeat(int nodeId, long term, InnerNodeService follower, Runnable extraFunc) {
 		AppendLogEntriesParam param = AppendLogEntriesParam.builder(nodeId, term).build();
-		return follower.doAppendLogEntries(param);
+		AppendLogReply reply = new AppendLogReply(false, -1);
+		try {
+			reply = follower.appendLogEntries(param);
+		} catch (Exception e) {
+			log.error("call heartbeat to {} failed, param: {}, e: {}", follower.getID(), param, e.getMessage());
+		}
+		if (!reply.isSuccess()) {
+			if (reply.getTerm() > term) {
+				extraFunc.run();
+			}
+			log.error("call heartbeat to {} failed, param: {}, reply: {}", follower.getID(), param, reply);
+		}
+		return reply;
 	}
 
 	/**
@@ -68,7 +83,9 @@ public class Leader {
 	 *            节点
 	 */
 	public static void noOp(Node self) {
-		self.propose("no-op");
+		if (self.propose("no-op") >= 0) {
+			self.stable();
+		}
 	}
 
 	/**

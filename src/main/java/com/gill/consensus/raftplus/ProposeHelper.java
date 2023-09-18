@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import com.gill.consensus.raftplus.common.Utils;
+import com.gill.consensus.raftplus.entity.AppendLogReply;
 import com.gill.consensus.raftplus.entity.Reply;
 import com.gill.consensus.raftplus.model.LogEntry;
 import com.gill.consensus.raftplus.service.InnerNodeService;
@@ -33,7 +34,7 @@ public class ProposeHelper implements PrintService {
 
 	private List<NodeProxy> followerProxies = Collections.emptyList();
 
-	private final Supplier<ExecutorService> supplier;
+	private final Supplier<ExecutorService> apiPoolSupplier;
 
 	@Override
 	public String println() {
@@ -60,8 +61,8 @@ public class ProposeHelper implements PrintService {
 		}
 	}
 
-	public ProposeHelper(Supplier<ExecutorService> supplier) {
-		this.supplier = supplier;
+	public ProposeHelper(Supplier<ExecutorService> apiPoolSupplier) {
+		this.apiPoolSupplier = apiPoolSupplier;
 	}
 
 	/**
@@ -104,8 +105,16 @@ public class ProposeHelper implements PrintService {
 	public int propose(LogEntry logEntry, Runnable dataStorageApplier) {
 		int logIdx = logEntry.getIndex();
 		proposeQueue.put(logIdx, new WaitLogEntry(Thread.currentThread(), logEntry));
-		boolean success = Utils.majorityCall(followerProxies, proxy -> proxy.appendLog(logEntry), Reply::isSuccess,
-				supplier.get(), "propose");
+		boolean success = Utils.majorityCall(followerProxies, proxy -> {
+			AppendLogReply reply = new AppendLogReply(false, -1);
+			try {
+				reply = proxy.appendLog(logEntry);
+			} catch (Exception e) {
+				log.error("call propose to {} failed, logEntry: {}, e: {}", proxy.getID(), logEntry, e.getMessage());
+			}
+			log.error("call propose to {} failed, logEntry: {}, reply: {}", proxy.getID(), logEntry, reply);
+			return reply;
+		}, Reply::isSuccess, apiPoolSupplier.get(), "propose");
 		if (success) {
 			int count = 0;
 			while (proposeQueue.firstKey() != logIdx) {

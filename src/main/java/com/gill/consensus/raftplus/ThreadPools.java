@@ -44,7 +44,7 @@ public class ThreadPools {
 			clusterPoolLock.unlock();
 		}
 		if (tmp != null) {
-			tmp.shutdown();
+			tmp.shutdownNow();
 			Utils.awaitTermination(tmp, "clusterPool");
 		}
 	}
@@ -64,7 +64,7 @@ public class ThreadPools {
 			apiPoolLock.unlock();
 		}
 		if (tmp != null) {
-			tmp.shutdown();
+			tmp.shutdownNow();
 			Utils.awaitTermination(tmp, "apiPool");
 		}
 	}

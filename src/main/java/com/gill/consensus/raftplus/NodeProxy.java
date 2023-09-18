@@ -59,7 +59,11 @@ public class NodeProxy implements Runnable, PrintService {
 		this.follower = follower;
 		this.preLogIdx = lastLogIdx;
 		this.executor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(10),
-				r -> new Thread(r, "node-" + self.getID() + "-" + follower.toString() + "-proxy"));
+				r -> new Thread(r, "node-" + self.getID() + "-" + follower.getID() + "-proxy"));
+	}
+
+	public int getID() {
+		return follower.getID();
 	}
 
 	@Override
@@ -84,7 +88,7 @@ public class NodeProxy implements Runnable, PrintService {
 	 */
 	public void stop() {
 		running = false;
-		this.executor.shutdown();
+		this.executor.shutdownNow();
 		Utils.awaitTermination(this.executor, "proxy-" + self.getID() + "-" + follower.getID());
 	}
 

@@ -34,7 +34,21 @@ public enum RaftAction {
 	/**
 	 * 停止
 	 */
-	STOP((node, params) -> Common.stop(node)),
+	PRE_STOP((node, params) -> {
+		log.debug("pre-stop, state: {}", node.println());
+	}),
+
+	/**
+	 * 清除请求线程池
+	 */
+	CLEAR_POOL((node, params) -> Common.stop(node)),
+
+	/**
+	 * 停止
+	 */
+	POST_STOP((node, params) -> {
+		log.debug("post-stop, state: {}", node.println());
+	}),
 
 	/**
 	 * 成为follower
@@ -62,11 +76,17 @@ public enum RaftAction {
 	 * 成为Leader
 	 */
 	POST_LEADER((node, params) -> {
-		Leader.init(node);
-		Leader.startHeartbeatSchedule(node);
 		log.debug("become to leader when term is {}", params.getTerm());
 		log.debug(node.println());
-		// Leader.noOp(node);
+		Leader.startHeartbeatSchedule(node, params);
+	}),
+
+	/**
+	 * leader准备
+	 */
+	INIT_LEADER((node, params) -> {
+		Leader.init(node);
+		Leader.noOp(node);
 	}),
 
 	/**

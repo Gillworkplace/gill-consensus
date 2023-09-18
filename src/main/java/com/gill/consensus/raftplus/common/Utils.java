@@ -6,6 +6,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import cn.hutool.core.util.RandomUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,27 @@ import lombok.extern.slf4j.Slf4j;
  **/
 @Slf4j
 public class Utils {
+
+	/**
+	 * 耗时计算
+	 * 
+	 * @param func
+	 *            方法
+	 * @param funcName
+	 *            方法名
+	 * @return 返回结果
+	 * @param <T>
+	 *            类型
+	 */
+	public static <T> T cost(Supplier<T> func, String funcName) {
+		long start = System.currentTimeMillis();
+		T ret = func.get();
+		long end = System.currentTimeMillis();
+		if (end - start > 0) {
+			log.debug("{} cost {}ms", funcName, end - start);
+		}
+		return ret;
+	}
 
 	/**
 	 * 睡眠

@@ -22,10 +22,8 @@ public class Common {
 	 *            节点
 	 */
 	public static void stop(Node self) {
-		log.debug("pre-stop, state: {}", self.println());
 		CompletableFuture<Void> f1 = CompletableFuture.runAsync(() -> self.getThreadPools().setClusterPool(null));
 		CompletableFuture<Void> f2 = CompletableFuture.runAsync(() -> self.getThreadPools().setApiPool(null));
 		CompletableFuture.allOf(f1, f2).join();
-		log.debug("post-stop, state: {}", self.println());
 	}
 }

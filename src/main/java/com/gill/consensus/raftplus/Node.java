@@ -2,8 +2,10 @@ package com.gill.consensus.raftplus;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -53,7 +55,11 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 	 */
 	protected final int ID;
 
+	protected int priority = 0;
+
 	protected AtomicInteger committedIdx = new AtomicInteger(0);
+
+	protected AtomicBoolean stable = new AtomicBoolean(false);
 
 	protected final HeartbeatState heartbeatState = new HeartbeatState(0, 0);
 
@@ -137,6 +143,18 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 
 	public void setCommittedIdx(int committedIdx) {
 		this.committedIdx.accumulateAndGet(committedIdx, Math::max);
+	}
+
+	public boolean isStable() {
+		return stable.get();
+	}
+
+	public void stable() {
+		stable.compareAndSet(false, true);
+	}
+
+	public void unstable() {
+		stable.compareAndSet(true, false);
 	}
 
 	private void loadData() {
@@ -223,15 +241,14 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 	 */
 	public void stepDown(long newTerm, boolean sync) {
 		if (this.metaDataManager.acceptHigherOrSameTerm(newTerm)) {
-			log.debug("node: {} step down", ID);
-			this.machine.publishEvent(RaftEvent.FORCE_FOLLOWER, new RaftEventParams(Integer.MAX_VALUE, sync));
+			publishEvent(RaftEvent.FORCE_FOLLOWER, new RaftEventParams(Integer.MAX_VALUE, sync));
 		}
 	}
 
 	private boolean voteFor(long newTerm, int nodeId) {
 		if (this.metaDataManager.voteFor(newTerm, nodeId)) {
 			refreshLastHeartbeatTimestamp();
-			this.machine.publishEvent(RaftEvent.FORCE_FOLLOWER, new RaftEventParams(Integer.MAX_VALUE, true));
+			publishEvent(RaftEvent.FORCE_FOLLOWER, new RaftEventParams(Integer.MAX_VALUE, true));
 			return true;
 		}
 		return false;
@@ -280,7 +297,7 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 
 		// 该节点还未超时
 		Pair<Long, Long> pair = heartbeatState.get();
-		if (System.currentTimeMillis() - pair.getValue() < config.getTimeoutInterval()) {
+		if (System.currentTimeMillis() - pair.getValue() < config.getBaseTimeoutInterval()) {
 			log.debug("node: {} discards PRE_VOTE, because the node is not timeout, client id: {}", ID,
 					param.getNodeId());
 			return new Reply(false, term);
@@ -343,10 +360,11 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 			}
 			refreshLastHeartbeatTimestamp();
 			stepDown(pTerm, true);
+			stable();
 
 			// 没有logs属性的为ping请求
 			if (param.getLogs() == null || param.getLogs().isEmpty()) {
-				log.debug("node: {} receive heartbeat from {}", ID, param.getNodeId());
+				log.trace("node: {} receive heartbeat from {}", ID, param.getNodeId());
 				return new AppendLogReply(true, pTerm);
 			}
 
@@ -424,9 +442,33 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 	public synchronized void start(List<? extends Node> nodes) {
 		this.machine.start();
 		this.nodes = new ArrayList<>(nodes);
+		calcPriority(null);
 		this.followers = nodes.stream().filter(node -> this != node).collect(Collectors.toList());
 		loadData();
-		this.publishEvent(RaftEvent.INIT, new RaftEventParams(getTerm()));
+		this.publishEvent(RaftEvent.INIT, new RaftEventParams(getTerm(), true));
+	}
+
+	public synchronized void start(List<? extends Node> nodes, Integer priority) {
+		this.machine.start();
+		this.nodes = new ArrayList<>(nodes);
+		calcPriority(priority);
+		this.followers = nodes.stream().filter(node -> this != node).collect(Collectors.toList());
+		loadData();
+		this.publishEvent(RaftEvent.INIT, new RaftEventParams(getTerm(), true));
+	}
+
+	private void calcPriority(Integer priority) {
+		if (priority != null) {
+			this.priority = priority;
+			return;
+		}
+		List<? extends Node> sort = this.nodes.stream().sorted(Comparator.comparingInt((Node n) -> n.getID()))
+				.collect(Collectors.toList());
+		for (int i = 0; i < sort.size(); i++) {
+			if (sort.get(i).getID() == ID) {
+				this.priority = i;
+			}
+		}
 	}
 
 	@Override

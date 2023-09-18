@@ -9,7 +9,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.gill.consensus.raftplus.common.Utils;
 import com.gill.consensus.raftplus.config.RaftConfig;
 
-import cn.hutool.core.util.RandomUtil;
 import lombok.AccessLevel;
 import lombok.Getter;
 
@@ -35,23 +34,21 @@ public class Schedulers {
 	/**
 	 * set
 	 *
-	 * @param runnable
+	 * @param func
 	 *            r
-	 * @param config
-	 *            config
+	 * @param interval
+	 *            interval
 	 * @param nodeId
 	 *            节点ID
 	 */
-	public void setTimeoutScheduler(Runnable runnable, RaftConfig config, int nodeId) {
+	public void setTimeoutScheduler(Runnable func, long interval, int nodeId) {
 		timeoutLock.lock();
 		try {
 			if (this.timeoutScheduler != null) {
 				clearTimeoutScheduler();
 			}
 			this.timeoutScheduler = new ScheduledThreadPoolExecutor(1, r -> new Thread(r, "follower-" + nodeId));
-			this.timeoutScheduler.scheduleAtFixedRate(runnable, 0,
-					config.getTimeoutInterval() + RandomUtil.randomLong(config.getTimeoutRandomFactor()),
-					TimeUnit.MILLISECONDS);
+			this.timeoutScheduler.scheduleAtFixedRate(func, interval, interval, TimeUnit.MILLISECONDS);
 		} finally {
 			timeoutLock.unlock();
 		}

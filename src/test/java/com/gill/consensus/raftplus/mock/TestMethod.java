@@ -14,6 +14,13 @@ import java.util.Map;
 public interface TestMethod {
 
 	/**
+	 * 是否正在运行
+	 *
+	 * @return up
+	 */
+	boolean isUp();
+
+	/**
 	 * 是否为leader
 	 * 
 	 * @return 是否
