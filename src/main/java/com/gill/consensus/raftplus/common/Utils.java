@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class Utils {
 
+	public final static String NO_OP = "no_op";
+
 	/**
 	 * 耗时计算
 	 * 

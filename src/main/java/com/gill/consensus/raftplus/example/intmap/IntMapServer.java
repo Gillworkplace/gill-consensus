@@ -1,5 +1,7 @@
 package com.gill.consensus.raftplus.example.intmap;
 
+import java.util.List;
+
 import com.gill.consensus.raftplus.Node;
 import com.gill.consensus.raftplus.apis.EmptyLogStorage;
 import com.gill.consensus.raftplus.apis.EmptyMetaStorage;
@@ -23,6 +25,23 @@ public class IntMapServer {
 	}
 
 	/**
+	 * 启动
+	 * 
+	 * @param nodes
+	 *            节点
+	 */
+	public void start(List<? extends Node> nodes) {
+		node.start(nodes);
+	}
+
+	/**
+	 * 停止
+	 */
+	public void stop() {
+		node.stop();
+	}
+
+	/**
 	 * 设置
 	 * 
 	 * @param key
@@ -43,7 +62,7 @@ public class IntMapServer {
 	 *            key
 	 * @return value
 	 */
-	public int get(String key) {
+	public Integer get(String key) {
 		return dataStorage.get(key);
 	}
 }

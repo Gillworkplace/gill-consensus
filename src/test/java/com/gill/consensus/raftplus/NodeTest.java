@@ -7,6 +7,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.IntStream;
 
+import com.gill.consensus.raftplus.mock.MockIntMapServer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ import cn.hutool.json.JSONUtil;
  * @version 2023/09/04
  **/
 @SpringBootTest
-public class ClusterTest extends BaseTest {
+public class NodeTest extends BaseTest {
 
 	private List<MockNode> nodesInit(int num, long waitTime) {
 		List<MockNode> nodes = init(num);
@@ -112,6 +113,14 @@ public class ClusterTest extends BaseTest {
 			}
 			sleep(10);
 		}
+	}
+
+	private static MockNode findLeader(List<MockNode> nodes) {
+		Optional<MockNode> leaderOpt = nodes.stream().filter(MockNode::isLeader).findFirst();
+		if (!leaderOpt.isPresent()) {
+			Assertions.fail("not find leader");
+		}
+		return leaderOpt.get();
 	}
 
 	@RepeatedTest(10)
@@ -205,7 +214,7 @@ public class ClusterTest extends BaseTest {
 	@Test
 	public void testExceptionPropose() {
 		List<MockNode> nodes = nodesInitUntilStable(5);
-		MockNode leader = nodes.stream().filter(MockNode::isLeader).findFirst().get();
+		MockNode leader = findLeader(nodes);
 		leader.propose("1");
 		leader.propose("2");
 		leader.propose("3");
@@ -232,12 +241,6 @@ public class ClusterTest extends BaseTest {
 		}
 		System.out.println("offset: " + offset);
 		return nodes;
-	}
-
-	private static void printNodes(List<MockNode> nodes) {
-		for (MockNode node : nodes) {
-			System.out.println(node.println());
-		}
 	}
 
 	private static void stopNodes(List<MockNode> nodes) {

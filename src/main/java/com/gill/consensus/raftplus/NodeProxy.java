@@ -59,7 +59,7 @@ public class NodeProxy implements Runnable, PrintService {
 		this.follower = follower;
 		this.preLogIdx = lastLogIdx;
 		this.executor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(10),
-				r -> new Thread(r, "node-" + self.getID() + "-" + follower.getID() + "-proxy"));
+				r -> new Thread(r, "node-proxy-" + self.getID() + "-" + follower.getID()));
 	}
 
 	public int getID() {
@@ -105,7 +105,10 @@ public class NodeProxy implements Runnable, PrintService {
 			List<LogEntry> appendLogs = entries.stream().map(LogEntryReply::getLogEntry).collect(Collectors.toList());
 			try {
 				AppendLogReply reply = doAppendLogs(appendLogs);
-				handleReply(entries, reply);
+				if(handleReply(entries, reply)) {
+					continue;
+				}
+				putbackLogs(entries);
 			} catch (Exception e) {
 				log.error("node: {} appends logs to {} failed, e: {}", self.getID(), follower.getID(), e.getMessage());
 				putbackLogs(entries);
@@ -144,9 +147,10 @@ public class NodeProxy implements Runnable, PrintService {
 		return follower.appendLogEntries(param);
 	}
 
-	private void handleReply(List<LogEntryReply> entries, AppendLogReply reply) throws SyncSnapshotException {
+	private boolean handleReply(List<LogEntryReply> entries, AppendLogReply reply) throws SyncSnapshotException {
 		if (reply.isSuccess()) {
-			handleSuccess(entries);
+			handleSuccess(entries, reply);
+			return true;
 		} else if (reply.getTerm() > self.getTerm()) {
 
 			// 服务端任期大于本机，则更新任期并降级为follower
@@ -160,13 +164,15 @@ public class NodeProxy implements Runnable, PrintService {
 			// 修复follower旧日志
 			repairOldLogs(reply.getCompareIdx());
 		}
+		return false;
 	}
 
-	private void handleSuccess(List<LogEntryReply> entries) {
+	private void handleSuccess(List<LogEntryReply> entries, AppendLogReply reply) {
 		int lastLogIdx = lastLogIdx(entries);
 		preLogIdx = lastLogIdx;
 		self.setCommittedIdx(lastLogIdx);
 		for (LogEntryReply entry : entries) {
+			entry.setReply(reply);
 			Optional.ofNullable(entry.getLatch()).ifPresent(CountDownLatch::countDown);
 		}
 	}

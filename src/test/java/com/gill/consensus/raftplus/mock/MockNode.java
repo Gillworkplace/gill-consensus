@@ -2,7 +2,10 @@ package com.gill.consensus.raftplus.mock;
 
 import java.util.List;
 
+import org.springframework.test.util.ReflectionTestUtils;
+
 import com.gill.consensus.raftplus.Node;
+import com.gill.consensus.raftplus.machine.RaftMachine;
 import com.gill.consensus.raftplus.machine.RaftState;
 import com.gill.consensus.raftplus.model.LogEntry;
 
@@ -18,23 +21,27 @@ public class MockNode extends Node implements TestMethod {
 		super(id);
 	}
 
+	public RaftMachine getRaftMachine() {
+		return (RaftMachine) ReflectionTestUtils.getField(this, "machine");
+	}
+
 	@Override
 	public boolean isUp() {
-		return machine.getState() != RaftState.STRANGER;
+		return getRaftMachine().getState() != RaftState.STRANGER;
 	}
 
 	@Override
 	public boolean isLeader() {
-		return machine.getState() == RaftState.LEADER;
+		return getRaftMachine().getState() == RaftState.LEADER;
 	}
 
 	@Override
 	public boolean isFollower() {
-		return machine.getState() == RaftState.FOLLOWER;
+		return getRaftMachine().getState() == RaftState.FOLLOWER;
 	}
 
 	@Override
 	public List<LogEntry> getLog() {
-		return logManager.getLogs(0, Integer.MAX_VALUE);
+		return getLogManager().getLogs(0, Integer.MAX_VALUE);
 	}
 }

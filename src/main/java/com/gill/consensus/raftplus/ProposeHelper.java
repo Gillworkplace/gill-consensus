@@ -109,6 +109,7 @@ public class ProposeHelper implements PrintService {
 			AppendLogReply reply = new AppendLogReply(false, -1);
 			try {
 				reply = proxy.appendLog(logEntry);
+				return reply;
 			} catch (Exception e) {
 				log.error("call propose to {} failed, logEntry: {}, e: {}", proxy.getID(), logEntry, e.getMessage());
 			}

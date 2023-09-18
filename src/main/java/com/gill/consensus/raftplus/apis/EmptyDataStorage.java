@@ -8,7 +8,7 @@ import com.gill.consensus.raftplus.model.Snapshot;
  * @author gill
  * @version 2023/09/07
  **/
-public class EmptyDataStorage implements DataStorage {
+public class EmptyDataStorage extends VersionDataStorage {
 
 	@Override
 	public int getApplyIdx() {
@@ -16,32 +16,28 @@ public class EmptyDataStorage implements DataStorage {
 	}
 
 	@Override
+	public byte[] getSnapshotData() {
+		return new byte[0];
+	}
+
+	@Override
 	public int loadSnapshot() {
 		return 0;
 	}
+	
 
 	@Override
-	public Snapshot getSnapshot() {
-		return new Snapshot(0, 0, new byte[0]);
-	}
-
-	@Override
-	public void saveSnapshot() {
+	public void saveSnapshotToFile(Snapshot snapshot) {
 
 	}
 
 	@Override
-	public void saveSnapshot(long term, int applyIdx, byte[] data) {
+	public void saveSnapshot(byte[] data) {
 
 	}
 
 	@Override
 	public String apply(String command) {
-		return "";
-	}
-
-	@Override
-	public String apply(int logIdx, String command) {
 		return "";
 	}
 

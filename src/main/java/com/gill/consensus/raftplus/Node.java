@@ -53,46 +53,44 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 	/**
 	 * 节点属性
 	 */
-	protected final int ID;
+	private final int ID;
 
-	protected int priority = 0;
+	private int priority = 0;
 
-	protected AtomicInteger committedIdx = new AtomicInteger(0);
+	private final AtomicInteger committedIdx = new AtomicInteger(0);
 
-	protected AtomicBoolean stable = new AtomicBoolean(false);
+	private final AtomicBoolean stable = new AtomicBoolean(false);
 
-	protected final HeartbeatState heartbeatState = new HeartbeatState(0, 0);
+	private final HeartbeatState heartbeatState = new HeartbeatState(0, 0);
 
-	protected final Lock lock = new ReentrantLock();
+	private final Lock lock = new ReentrantLock();
 
 	/**
 	 * 节点组件
 	 */
-	protected final Schedulers schedulers = new Schedulers();
+	private final Schedulers schedulers = new Schedulers();
 
-	protected final ThreadPools threadPools = new ThreadPools();
+	private final ThreadPools threadPools = new ThreadPools();
 
-	protected final MetaDataManager metaDataManager;
+	private final MetaDataManager metaDataManager;
 
-	protected RaftConfig config = new RaftConfig();
+	private RaftConfig config = new RaftConfig();
 
 	@Getter(AccessLevel.NONE)
-	protected transient final RaftMachine machine = new RaftMachine(this);
+	private transient final RaftMachine machine = new RaftMachine(this);
 
-	protected transient final DataStorage dataStorage;
+	private transient final DataStorage dataStorage;
 
-	protected transient final LogManager logManager;
+	private transient final LogManager logManager;
 
-	protected transient ProposeHelper proposeHelper = new ProposeHelper(threadPools::getApiPool);
+	private final transient ProposeHelper proposeHelper = new ProposeHelper(threadPools::getApiPool);
 
 	/**
 	 * 集群属性
 	 */
-	protected Node leader = null;
+	private List<InnerNodeService> followers = Collections.emptyList();
 
-	protected List<InnerNodeService> followers = Collections.emptyList();
-
-	protected List<? extends Node> nodes = Collections.emptyList();
+	private List<? extends Node> nodes = Collections.emptyList();
 
 	public Node() {
 		ID = RandomUtil.randomInt(100, 200);
@@ -204,7 +202,7 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 		log.debug("applying logs from {} to {} ...", logIdx, lastLogIdx);
 		for (int i = logIdx; i <= lastLogIdx; i++) {
 			LogEntry logEntry = logManager.getLog(i);
-			dataStorage.apply(logEntry.getIndex(), logEntry.getCommand());
+			dataStorage.apply(logEntry.getTerm(), logEntry.getIndex(), logEntry.getCommand());
 		}
 		log.debug("finish applying logs.");
 	}
@@ -401,7 +399,7 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 			// 应用日志
 			for (int idx = committedIdx + 1; idx <= param.getCommitIdx(); idx++) {
 				LogEntry logEntry = logManager.getLog(idx);
-				dataStorage.apply(idx, logEntry.getCommand());
+				dataStorage.apply(pTerm, idx, logEntry.getCommand());
 			}
 
 			// 更新committedIdx
@@ -492,7 +490,7 @@ public class Node implements InnerNodeService, ClusterService, PrintService {
 		proposeHelper.propose(logEntry, () -> {
 			if (command != null) {
 				log.debug("data storage apply {} {}", logEntry.getIndex(), command);
-				dataStorage.apply(logEntry.getIndex(), command);
+				dataStorage.apply(logEntry.getTerm(), logEntry.getIndex(), command);
 			}
 		});
 		return logEntry.getIndex();

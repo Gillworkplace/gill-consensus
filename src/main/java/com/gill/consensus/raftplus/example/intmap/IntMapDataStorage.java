@@ -1,10 +1,15 @@
 package com.gill.consensus.raftplus.example.intmap;
 
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
-import com.gill.consensus.raftplus.apis.DataStorage;
+import com.gill.consensus.raftplus.apis.VersionDataStorage;
 import com.gill.consensus.raftplus.model.Snapshot;
+
+import cn.hutool.core.lang.TypeReference;
+import cn.hutool.json.JSONUtil;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Repository
@@ -12,21 +17,12 @@ import com.gill.consensus.raftplus.model.Snapshot;
  * @author gill
  * @version 2023/09/07
  **/
-public class IntMapDataStorage implements DataStorage {
+@Slf4j
+public class IntMapDataStorage extends VersionDataStorage {
 
-	private Map<String, Integer> map = new ConcurrentHashMap<>();
+	private Map<String, Integer> map = new HashMap<>(1024);
 
-	/**
-	 * 设置
-	 * 
-	 * @param key
-	 *            key
-	 * @param value
-	 *            value
-	 */
-	public void put(String key, int value) {
-		map.put(key, value);
-	}
+	private final IntMapCommandSerializer serializer = new IntMapCommandSerializer();
 
 	/**
 	 * 获取
@@ -46,36 +42,35 @@ public class IntMapDataStorage implements DataStorage {
 
 	@Override
 	public int loadSnapshot() {
+		map = new HashMap<>(1024);
 		return 0;
 	}
 
 	@Override
-	public Snapshot getSnapshot() {
-		return new Snapshot(0, 0, new byte[0]);
-	}
-
-	@Override
-	public void saveSnapshot() {
-
-	}
-
-	@Override
-	public void saveSnapshot(long term, int applyIdx, byte[] data) {
-
+	public byte[] getSnapshotData() {
+		String mapStr = JSONUtil.toJsonStr(map);
+		return mapStr.getBytes(StandardCharsets.UTF_8);
 	}
 
 	@Override
 	public String apply(String command) {
-		return "";
+		IntMapCommand cm = serializer.deserialize(command);
+		return cm.execute(map, cm);
 	}
 
 	@Override
-	public String apply(int logIdx, String command) {
-		return "";
+	public void saveSnapshotToFile(Snapshot snapshot) {
+		log.debug("ignore saving snapshot to file");
+	}
+
+	@Override
+	public void saveSnapshot(byte[] data) {
+		map = JSONUtil.toBean(new String(data, StandardCharsets.UTF_8), new TypeReference<Map<String, Integer>>() {
+		}, true);
 	}
 
 	@Override
 	public String println() {
-		return "";
+		return JSONUtil.toJsonStr(map);
 	}
 }

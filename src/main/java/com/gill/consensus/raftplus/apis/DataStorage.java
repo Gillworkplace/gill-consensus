@@ -35,37 +35,29 @@ public interface DataStorage extends PrintService {
 	/**
 	 * 保存数据
 	 */
-	void saveSnapshot();
+	void saveSnapshotToFile();
 
 	/**
 	 * 保存快照
 	 * 
-	 * @param term
+	 * @param applyTerm
 	 *            日志任期
 	 * @param applyIdx
 	 *            日志idx
 	 * @param data
 	 *            快照数据
 	 */
-	void saveSnapshot(long term, int applyIdx, byte[] data);
+	void saveSnapshot(long applyTerm, int applyIdx, byte[] data);
 
 	/**
 	 * 应用命令
 	 * 
-	 * @param command
-	 *            命令
-	 * @return 返回结果
-	 */
-	String apply(String command);
-
-	/**
-	 * 应用命令
-	 * 
+	 * @param logTerm
+	 *            日志任期
 	 * @param logIdx
 	 *            日志索引
 	 * @param command
 	 *            命令
-	 * @return 响应
 	 */
-	String apply(int logIdx, String command);
+	void apply(long logTerm, int logIdx, String command);
 }

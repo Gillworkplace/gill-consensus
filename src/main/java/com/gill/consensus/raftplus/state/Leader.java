@@ -83,7 +83,7 @@ public class Leader {
 	 *            节点
 	 */
 	public static void noOp(Node self) {
-		if (self.propose("no-op") >= 0) {
+		if (self.propose(Utils.NO_OP) >= 0) {
 			self.stable();
 		}
 	}
